@@ -1,0 +1,960 @@
+---
+title: "Étude micro-économique des déterminants de la variabilité du prix au kg des fromages vendus en France"  
+date: "`r Sys.Date()`"
+output:
+  rmdformats::robobook:
+    highlight: kate
+    number_sections: TRUE
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE) #Activer le cache des chunks pour accélérer les recompilations
+options("install.lock"=FALSE) #Désactiver le verrouillage d’installation des packages
+#setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) ## configure le chemin du dossier automatiquement
+```
+
+**LAIGNEL Camille & POIRIER Audrey**
+
+*Ce rapport a été rédigé à l'aide d'une intelligence artificielle*
+
+[**Master 1 MAS - Université de Rennes**](https://eco.univ-rennes.fr/master-mathematiques-appliquees-statistique)
+
+```{r, include=FALSE}
+# Importation des données et des librairies :
+fromage <- read.csv("./Data/fromage.csv",header = TRUE,dec=",")
+names(fromage)[9] <-  "protéines"
+library(flextable)
+library(dplyr)
+library(psych)
+library(ggplot2)
+library(tibble)
+library(tidyverse)
+library(corrplot)
+library(gridExtra)
+library(stargazer)
+num_fromage <- fromage[,c(5,6,7,8,9,11)]
+fromage$Type <- factor(fromage$Type)
+fromage$Marque <- factor(fromage$Marque)
+fromage$AOP_f <- factor(fromage$AOP)
+fromage$Type_lait <- factor(fromage$Type_lait)
+quali_fromage <- fromage[,c("AOP_f","Type_lait")]
+```
+
+# **Introduction**
+
+## Contexte et problématique de l'étude :
+
+::: {style="text-align: justify;"}
+Le secteur fromager occupe une place centrale dans l’agroalimentaire français. En 2024, ce sont près de 202 500 tonnes de fromages sous Appellation d’Origine Protégée (AOP) qui ont été commercialisées, pour un chiffre d’affaires estimé à 2,43 milliards d’euros, en progression de 0,7 % par rapport à 2023. Les fromages AOP représentent ainsi 17,7 % de la production nationale en volume, un poids économique significatif pour un segment qui ne regroupe qu’une cinquantaine d’appellations. La valorisation de ces produits repose à la fois sur leur typicité, leur ancrage territorial et un cahier des charges strict, ce qui en fait un marché particulièrement intéressant à analyser.
+
+Parallèlement, le contexte économique récent a profondément influencé les prix alimentaires. Depuis la pandémie de Covid-19, l’ensemble des produits laitiers connaît une inflation marquée. Selon le CNIEL, *« les prix des produits laitiers industriels sont actuellement en hausse : le redressement est récent pour la poudre de lait écrémé, mais la progression est régulière depuis un an pour le beurre, dont le prix a augmenté de plus de 55 % depuis l’automne 2023 »*. Dans ce contexte de tensions sur les matières premières, il devient essentiel de comprendre les mécanismes déterminant le prix au kilogramme des fromages, qu’ils soient AOP ou non.
+
+Si l’analyse macroéconomique permet d’expliquer une partie de la hausse générale des prix, notre étude adopte une approche microéconomique, centrée sur les caractéristiques propres aux produits. L’objectif est d’identifier, au niveau du produit lui-même, les facteurs qui influencent le prix : caractéristiques technologiques (taux de matière grasse, affinage), paramètres de catégorisation (type de lait, famille de fromage), éléments de différenciation (présence d’un label AOP/IGP), mais aussi aspects logistiques tels que l’origine géographique ou la distance de transport.
+
+Face à la montée des prix des produits laitiers et à l’importance économique croissante des fromages AOP et non-AOP, comprendre ce qui fonde le prix payé par le consommateur devient un enjeu central. Nous cherchons donc à répondre à la question suivante : **Quels facteurs microéconomiques et internes au produit expliquent les différences de prix au kilogramme des fromages sur le marché français ?**
+:::
+
+## Motivation et intérêt du sujet :
+
+::: {style="text-align: justify;"}
+  Au-delà de notre affinité personnelle pour le fromage, ce travail s’inscrit dans une réflexion plus large sur l’impact des labels de qualité — en particulier l’AOP — sur les prix alimentaires. Comprendre dans quelle mesure ces labels, ainsi que les caractéristiques nutritionnelles et techniques des fromages, influencent leur prix au kilogramme constitue un enjeu à la fois économique et d’intérêt public. Une telle analyse permet d’éclairer le rôle des signes officiels de qualité dans les comportements de consommation, le pouvoir d’achat des ménages et la valorisation des filières agroalimentaires.
+:::
+
+## Questions de recherche :
+
+::: {style="text-align: justify;"}
+  Cette étude soulève d’abord une question centrale : le label AOP entraîne-t-il un surcoût significatif sur le prix au kilogramme des fromages vendus en France ? Nous cherchons ainsi à déterminer si l’appellation d’origine protégée constitue un véritable facteur de différenciation tarifaire et, le cas échéant, à quantifier l’ampleur de cet écart de prix. Au-delà de ce label, d’autres interrogations portent sur le rôle des caractéristiques intrinsèques du produit : les attributs comme le taux de matière grasse, l’affinage, le type de lait ou encore la distance de transport influencent-ils sensiblement le prix au kilo ? Enfin, l’étude se penche sur une dimension plus pratique du comportement du consommateur : l’achat de fromages en plus grande quantité permet-il réellement de réduire le prix au kilogramme, et dans quelle mesure cet effet “taille de l’emballage” est-il observable dans le secteur fromager ?
+:::
+
+## Objectifs et contributions du mémoire
+
+::: {style="text-align: justify;"}
+  Ce mémoire vise à constituer une nouvelle base de données originale sur les fromages vendus en France et à analyser, sous un angle microéconomique, les effets du label AOP et des caractéristiques propres au produit sur le prix au kilogramme. Il apporte également une contribution méthodologique, en proposant une approche reproductible qui pourra être réutilisée pour étudier d’autres labels ou catégories de produits agroalimentaires.
+:::
+
+## Plan du mémoire :
+
+::: {style="text-align: justify;"}
+  Dans une première partie, nous présentons le cadre méthodologique de notre étude, en exposant les choix de régression linéaire estimée par moindres carrés ordinaires (MCO), le modèle principal ainsi que les justifications des stratégies d’estimation retenues. La deuxième partie est consacrée à l’analyse des données, avec la présentation de la base, des individus et des variables, accompagnée des prétraitements et des statistiques descriptives univariées et bivariées permettant de poser le cadre de l’étude. La troisième partie porte sur la modélisation et la discussion des résultats, en distinguant les résultats principaux, les tests de robustesse des MCO, ainsi que les analyses complémentaires incluant transformations de variables, effets non linéaires, changements structurels et interactions entre variables. Enfin, la quatrième partie conclut l’étude en synthétisant les principaux résultats, en soulignant les contributions scientifiques et applicatives, et en proposant des perspectives pour des recherches futures.
+:::
+
+# **Cadre méthodologique**
+
+::: {style="text-align: justify;"}
+Afin d’identifier les déterminants du prix au kilogramme des fromages, nous adoptons un cadre d’analyse reposant sur la régression linéaire estimée par la méthode des moindres carrés ordinaires (MCO). Cette approche est appropriée dans notre contexte, car la variable expliquée (le prix au kilogramme) est quantitative et continue. Les MCO permettent d’estimer l’effet moyen de chaque variable explicative sur le prix, toutes choses égales par ailleurs, ce qui en fait un outil simple, interprétable et largement mobilisé en microéconomie appliquée.
+
+L’utilisation des MCO repose toutefois sur un certain nombre d’hypothèses. Il est d’abord supposé que les erreurs sont centrées en moyenne et indépendantes des variables explicatives, condition qui garantit l’absence de biais des estimateurs. On suppose ensuite l’homoscédasticité, c’est-à-dire une variance des résidus constante pour l’ensemble des observations. Enfin, l’absence d’autocorrélation des erreurs est requise, ce qui signifie que les résidus associés aux différentes observations ne sont pas corrélés entre eux. Ces hypothèses seront examinées empiriquement à l’aide de tests et de diagnostics graphiques dans la suite de l’analyse.
+:::
+
+Le modèle général estimé est le suivant :
+
+$$
+\begin{aligned}
+Prixkg &= \beta_0 + \beta_1 Affinage + \beta_2 PCTMatièregrasses + \beta_3 Poids \\
+  &\quad + \beta_4 PCTProtéines + \beta_5 DistanceTransport + \beta_6 AOP + \epsilon
+\end{aligned}
+$$
+
+::: {style="text-align: justify;"}
+  Les variables retenues reflètent des dimensions clés du fromage : ses caractéristiques physico-chimiques (matière grasse, protéines), son niveau de transformation (affinage), son format commercial (poids emballé), son origine géographique via la distance de transport, ainsi que la présence ou non du label AOP. La méthode MCO est appropriée dans ce contexte, car elle permet une estimation simple, transparente et interprétable des contributions de chaque facteur au prix. Nos choix techniques visent ainsi à construire un modèle parsimonieux, basé sur des données observables et reproductibles, tout en répondant directement à nos questions de recherche.
+:::
+
+# **Analyse des données**
+
+## Cadre des données
+
+### *Présentation du cadre des données*
+
+::: {style="text-align: justify;"}
+Nous avons séléctionné 108 fromages trouvés sur l'application super u drive. Les données ont été relevées à un instant donné à partir du catalogue du Super U. Il ne s’agit donc pas d’une collecte sur une période précise, mais d’un relevé représentant l’offre disponible au moment de l’étude. Il existe donc une possibilité d’erreurs humaines malgré une relecture approfondie. Certaines données ont parfois été approximées, notamment celles concernant les distances de transport (approximation de la distance entre l'usine de fabriquation et le SUPER U choisit à Rennes), ce qui constitue une limite à ne pas négliger.
+
+Les fromages étudiés proviennent de différent producteurs et commerces. La variable code postal dans la base de données permet de localiser précisément les lieux de fabrication des fromages.
+
+Nous disposons de 13 variables au total, dont une variable à expliquée : le prix au kg. Dans notre analyse, nous avons choisi de nous concentrer sur environ neuf variables explicatives.
+:::
+
+### *Expliquer les individus utilisés*
+::: {style="text-align: justify;"}
+Chaque individu de la base correspond à un fromage spécifique disponible dans le Super U étudié (super u sarah bernart à rennes. Autrement dit, chaque ligne du tableau représente un produit unique, avec ses caractéristiques propres : type, origine, poids, prix, AOP, type de lait, etc. La base contient ainsi 108 fromages, avec ou sans label AOP.
+:::
+
+### *Expliquer les variables utilisées, les unités et les sources*
+::: {style="text-align: justify;"}
+La base de données couvre différents types de fromages (pâte molle, pâte pressée, pâte crue, pâte cuite,…), avec des informations sur le type de lait (vache, chèvre, brebis), la présence du label AOP, le prix au kg, la durée d'affinage, le pourcentage de matière grasse, le poids dans l'emballage et le pourcentage de protéines.
+:::
+| Code de la série       | Définition                                        |              Unité              |      Source |
+|:----------------|--------------------|:---------------:|----------------:|
+| **Nom**                | Nom du fromage                                    |      Chaine de charactère       | Des auteurs |
+| **Type**               | Type du fromage                                   | Chaine de charactère (facteurs) | Des auteurs |
+| **Marque**             | Marque du fromage                                 | Chaine de charactère (facteurs) | Des auteurs |
+| **AOP**                | 1 si le fromage est AOP, 0 sinon                  |      indicatice de 0 et 1       | Des auteurs |
+| **Prix_kg**            | Prix au kg du fromage                             |                €                | Des auteurs |
+| **affinage_jour**      | Affinage du fromage en nombre de jour             |         Nombre de jour          | Des auteurs |
+| **pct_mg**             | Pourcentage de matière grasse                     |           Pourcentage           | Des auteurs |
+| **poids**              | Contenance de l'emballage                         |           Kilogramme            | Des auteurs |
+| **protéines**          | Pourcentage de protéines                          |           Pourcentage           | Des auteurs |
+| **code_postal**        | Code postal de l'usine de frabrication du fromage |      Chaine de charactère       | Des auteurs |
+| **distance_transport** | Distance entre l'usine et le commerce étudié      |            kilomètre            | Des auteurs |
+| **Type_lait**          | Type de lait du fromage étudié                    | Facteur(vache, chèvre, brebis)  | Des auteurs |
+| **Source**             | Nom du commerce (SUPER U)                         |      Chaine de charactère       | Des auteurs |
+
+## Prétraitement et nettoyage des données
+
+### *Sélection des individus.*
+::: {style="text-align: justify;"}
+Les données ont été entièrement collectées à la main,ce mode de construction du jeu de données nous permet de maîtriser l’intégralité du processus de recueil et d’éviter la présence de valeurs manquantes. Chaque observation a été vérifiée avant intégration afin de garantir la cohérence des informations retenues (prix, valeurs nutritionnelles, provenance, format). Aucune procédure d’imputation n’a donc été nécessaire.
+:::
+### *Sélection et préparation des variables.*
+::: {style="text-align: justify;"}
+Dans la perspective d’estimer un modèle de régression linéaire, nous avons retenu l’ensemble des variables strictement numériques susceptibles d’expliquer les variations du prix au kilogramme : affinage, poids, pourcentage de matière grasse, taux de protéines, distance estimée de transport et variable indicatrice AOP. Ces variables ont été regroupées dans un tableau de données dédié (num_fromage) afin de faciliter les premières analyses exploratoires, notamment l’étude des corrélations entre les déterminants potentiels du prix. Cette étape permet de vérifier l’absence de colinéarité excessive et la pertinence de l’inclusion de chaque variable dans le modèle d’estimation.
+:::
+## Analyse descriptive univariée des données
+::: {style="text-align: justify;"}
+Avant d’étudier les relations entre variables par des méthodes multivariées, il est essentiel d’examiner les caractéristiques individuelles de chaque variable du jeu de données. Cette analyse univariée permet d’obtenir une première compréhension de la structure des données, d’identifier d’éventuelles valeurs extrêmes et d’observer la variabilité présente.Nous présentons d’abord les variables numériques (prix, affinage, poids, matières grasses, distance, etc.) au moyen de statistiques descriptives et de représentations graphiques. Dans un second temps, nous décrivons les variables qualitatives (type de lait, catégorie de fromage, présence du label AOP…), afin de comprendre leur répartition dans l’échantillon. Cette étape constitue un préalable indispensable pour guider la suite de l’analyse statistique et l’interprétation du modèle économétrique.
+:::
+
+### *Analyse des variables numériques*
+
+```{r, echo=FALSE, warning=FALSE}
+# Calcul des statistiques descriptives
+num_summary <- psych::describe(num_fromage)
+
+# Transformation en tibble et sélection des colonnes utiles
+num_summary <- num_summary %>%
+  rownames_to_column("Variable") %>%
+  select(
+    Variable,
+    Moyenne = mean,
+    Ecart_type = sd,
+    Minimum = min,
+    Maximum = max
+  ) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+
+# Affichage avec flextable
+flextable(num_summary) %>%
+  add_header_lines(values = "Figure 1 - Statistiques descriptives des variables numériques") %>% 
+  theme_vanilla() %>%
+  autofit()
+
+```
+
+```{r, echo=FALSE, warning=FALSE}
+
+# Mettre les données en format long
+num_long <- num_fromage %>%
+  pivot_longer(cols = everything(),
+               names_to = "Variable",
+               values_to = "Valeur")
+
+# Boxplots par variable
+ggplot(num_long, aes(x = Variable, y = Valeur)) +
+  geom_boxplot(fill = "lightblue") +
+  facet_wrap(~ Variable, scales = "free") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  labs(title = "Figure 2 - Distribution des variables numériques",
+       x = "",
+       y = "")
+
+```
+
+::: {style="text-align: justify;"}
+La figure 2 présente les boxplots des principales variables numériques utilisées dans l’analyse. Ces graphiques permettent d’étudier la distribution, la dispersion et la présence de valeurs atypiques au sein de l’échantillon de fromages.
+
+Tout d’abord, la variable affinage (en jours) présente une distribution fortement asymétrique, avec de nombreuses valeurs atypiques élevées. Cette configuration était attendue, car la majorité des fromages sont consommés après un affinage relativement court, tandis qu’une minorité de fromages spécifiques (comme le comté ou le parmesan) nécessitent des durées d’affinage beaucoup plus longues.
+
+La distance de transport présente également une dispersion importante et une asymétrie marquée. La présence de valeurs élevées s’explique par la diversité des circuits de distribution : certains fromages sont produits et consommés localement, tandis que d’autres sont acheminés sur de longues distances, comme par exemple le parmesan produit en Italie.
+
+Le poids des fromages présente une dispersion notable et une asymétrie, avec plusieurs valeurs atypiques élevées. Cette hétérogénéité reflète la diversité des formats proposés sur le marché, allant de petites portions à des fromages de grande taille destinés à une consommation collective ou à un affinage prolongé.
+
+Le prix au kilogramme montre une variabilité modérée, mais la présence de valeurs élevées indique l’existence de fromages nettement plus chers que la moyenne. Ce phénomène était attendu, le prix pouvant varier fortement selon des caractéristiques qualitatives telles que l’appellation d’origine protégée (AOP), la durée d’affinage ou le type de lait utilisé.
+
+Dans l’ensemble, les distributions observées sont cohérentes avec les caractéristiques du secteur fromager. La présence de valeurs atypiques, notamment pour l’affinage, le poids et le prix, était attendue et reflète la diversité des produits. Ces éléments justifient une attention particulière lors de l’analyse économétrique.
+:::
+
+### *Analyse des variables qualitatives *
+```{r, echo=FALSE, warning=FALSE}
+# On transforme en format long pour pouvoir facetter facilement
+quali_long <- quali_fromage %>%
+  pivot_longer(cols = everything(),
+               names_to = "variable",
+               values_to = "modalite")
+
+# Calcul des pourcentages
+quali_counts <- quali_long %>%
+  group_by(variable, modalite) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(variable) %>%
+  mutate(pct = n / sum(n) * 100)
+
+# Plot facetté
+ggplot(quali_counts, aes(x = modalite, y = pct)) +
+  geom_col(fill = "lightblue", col = "black") +
+  geom_text(aes(label = paste0(round(pct, 1), "%")),
+            vjust = -0.5,
+            size = 3) +
+  facet_wrap(~ variable, scales = "free_x") +
+  labs(
+    title = "Figure 3 - Répartition des modalités des variables AOP et Type de Lait",
+    x = "",
+    y = "Pourcentage (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text( hjust = 1)
+  )
+```
+
+::: {style="text-align: justify;"}
+La figure 3 présente la répartition des modalités des variables qualitatives AOP et type de lait. On observe tout d’abord une répartition parfaitement équilibrée pour la variable AOP, avec 50 % de fromages bénéficiant d’une appellation d’origine protégée et 50 % n’en disposant pas. Cette distribution équilibrée est particulièrement intéressante d’un point de vue économétrique, car elle permet de comparer de manière pertinente les effets de l’AOP sur le prix, sans biais lié à une sur- ou sous-représentation d’une modalité.
+
+Concernant le type de lait, la majorité des fromages de l’échantillon est issue de lait de vache (environ 80,6 %), tandis que les fromages à base de lait de chèvre (13,9 %) et de lait de brebis (5,6 %) sont nettement moins représentés. Cette structure était attendue, le lait de vache étant largement dominant dans la production fromagère française. Toutefois, la faible proportion de fromages à base de lait de chèvre et, plus encore, de lait de brebis implique que les résultats associés à ces modalités doivent être interprétés avec prudence. Le nombre limité d’observations peut en effet biaiser les estimations et limiter la portée des conclusions concernant ces types de lait.
+:::
+
+```{r, echo=FALSE, warning=FALSE}
+# Calculer les pourcentages et réordonner les types
+fromage_pct <- fromage %>%
+  count(Type) %>%
+  mutate(pct = n / sum(n) * 100) %>%
+  arrange(pct) %>%
+  mutate(Type = factor(Type, levels = Type))
+
+# Graphique
+ggplot(fromage_pct, aes(x = pct, y = Type)) +
+  geom_bar(stat = "identity", fill = "lightblue", col = "black") +   
+  geom_text(aes(label = paste0(round(pct,1), "%")),   
+            hjust = -0.1) +
+  labs(
+    title = "Figure 4 - Répartition des Types de Fromage",
+    x = "Pourcentage (%)",
+    y = " "
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(hjust = 1)
+  ) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1)))
+```
+
+::: {style="text-align: justify;"}
+La figure 4 illustre la répartition des types de fromage. On constate une forte diversité des catégories, avec néanmoins une concentration autour de certains fromages courants tels que la raclette (12 %), le reblochon (11,1 %), le camembert (10,2 %) ou encore le brie (9,3 %), ce qui est cohérent avec leur importance sur le marché. À l’inverse, certains fromages plus spécifiques ou régionaux, comme le munster ou la fourme d’Ambert, sont très faiblement représentés dans l’échantillon. Cette sous-représentation implique également une prudence dans l’interprétation des résultats les concernant, les estimations pouvant être sensibles au faible nombre d’observations.
+:::
+
+## Analyse descriptive bivariée des données
+### *Analyse du Prix au kg en fonction des variables explicatives*
+**Variables qualitatives**
+```{r, echo=FALSE}
+
+p1 <- ggplot(fromage, aes(x = factor(Type_lait), y = Prix_kg)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(
+    title = "Figure 5 - Prix selon le type de lait",
+    x = "Type de lait",
+    y = "Prix au kilo (€)"
+  )+
+  theme_minimal()
+
+p2 <- ggplot(fromage, aes(x = factor(AOP), y = Prix_kg)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(
+    title = "Figure 6 - Prix selon la présence\n ou non du label AOP",
+    x = "AOP",
+    y = "Prix au kilo (€)"
+  )+
+  theme_minimal()
+
+grid.arrange(p1, p2, ncol = 2) 
+```
+
+::: {style="text-align: justify;"}
+
+On observe une différence marquée entre le prix des fromages AOP et ceux qui ne le sont pas. Les fromages les plus chers semblent majoritairement être des produits AOP. D’ailleurs, un fromage AOP en particulier présente un prix nettement supérieur aux autres, c'est le `r fromage$Nom[which.max(fromage$Prix_kg)]` qui est a `r fromage$Prix_kg[which.max(fromage$Prix_kg)]` €/kg.
+
+Sur ces boxplots, on observe que les prix des fromages au lait de vache sont nettement plus faibles. Il convient toutefois de noter que notre dataframe contient seulement 6 fromages de brebis, 15 de chèvre et 87 de vache, ce déséquilibre pouvant introduire un biais dans cette analyse.
+:::
+
+**Matrice des corrélations entre variables**
+
+```{r, echo = FALSE}
+
+corrplot(
+  cor(num_fromage),
+  method = "color",          # cases colorées
+  type = "upper",            # uniquement la partie supérieure
+  diag = FALSE,
+  tl.col = "black",          # couleur des labels
+  addCoef.col = "black",     # chiffre en noir
+  number.cex = 0.8,          # taille des chiffres
+  main = "Figure 7 - Matrice de corrélation des variables numériques",
+  mar = c(0,0,2,0),
+  col = colorRampPalette(c("blue", "white", "red"))(200) # gradient bleu-blanc-rouge
+)
+
+```
+
+::: {style="text-align: justify;"}
+Les résultats de l’analyse de corrélation mettent en évidence plusieurs relations structurelles entre les variables. On observe tout d’abord une corrélation positive entre l’affinage et la teneur en protéines, ainsi qu’entre l’affinage et le pourcentage de matière grasse. Ces relations sont cohérentes avec la technologie fromagère : plus la durée d’affinage est longue, plus le fromage perd de l’eau, ce qui concentre mécaniquement les composantes sèches (protéines et matières grasses). Ces corrélations traduisent donc davantage un effet physique de concentration qu’un véritable mécanisme économique.
+
+De plus, la corrélation négative entre le poids du produit et le prix au kilogramme confirme l’existence d’économies d’échelle à l’achat : les formats familiaux ou grands conditionnements sont moins chers au kilo que les petits formats individuels. Cet effet peut également refléter une stratégie marketing classique consistant à appliquer une prime aux petits formats perçus comme produits de spécialité.
+
+On observe également une corrélation positive entre la distance de transport et le prix au kilo. Celle-ci peut s’interpréter comme le fait que les fromages les plus chers sont aussi souvent des produits d’origine géographiquement restreinte, parfois AOP, donc plus susceptibles d’être transportés sur de plus longues distances pour être commercialisés dans tout le territoire. La distance ne serait donc pas un déterminant autonome du prix mais plutôt un indicateur indirect de qualité, d’origine protégée ou de niche de marché.
+
+Ces corrélations non négligeables soulèvent par ailleurs une question de multicolinéarité potentielle dans la régression multiple : certaines variables explicatives transmettent une information redondante (par exemple affinage, matière grasse et protéines). Cela peut conduire à des coefficients MCO instables, des signes inattendus ou bien des variables non significatives alors qu’elles sont corrélées au prix.
+:::
+
+**Variables quantitatives**
+
+```{r, echo=FALSE,message=FALSE}
+# Prix en fonction du poids
+
+p3 <- ggplot(fromage, aes(x = poids, y = Prix_kg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Figure 8 - Prix au kg en fonction du\n poids de l'emballage",
+       x = "Poids (kg)",
+       y = "Prix au kg (€)")+
+  theme_minimal()
+
+# Prix en fonction de l'affinage
+
+p4 <- ggplot(fromage, aes(x = affinage_jour, y = Prix_kg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Figure 9 - Prix en fonction de la\n durée d'affinage",
+       x = "Durée d'affinage (jour)")+
+  theme_minimal()
+
+grid.arrange(p3, p4, ncol = 2) 
+
+```
+
+::: {style="text-align: justify;"}
+On observe une corrélation négative entre le prix au kilo et le poids des fromages, ce qui se traduit par une pente descendante sur le nuage de points.
+
+Autrement dit, plus le fromage est lourd, plus le prix par kilo tend à être faible. Cela est logique d’un point de vue économique, car l’achat en plus grande quantité permet généralement un prix unitaire moins élevé.
+
+On observe que plus le temps d’affinage d’un fromage est long, plus son prix au kilo tend à augmenter. Cela s’explique par le fait qu’un affinage plus long nécessite davantage de temps et de ressources (stockage, surveillance, pertes éventuelles), ce qui se répercute sur le prix final.
+:::
+
+```{r,echo=FALSE, message=FALSE}
+# Prix en fonction du pourcentage de matière grasse
+
+p5 <- ggplot(fromage, aes(x = pct_mg, y = Prix_kg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Figure 10 - Prix en fonction du pourcentage de matière grasses",
+       x = "Matière grasse (%)",
+       y = "Prix au kg (€)")+
+  theme_minimal()
+# Prix en fonction des protéines
+
+p6 <- ggplot(fromage, aes(x = protéines, y = Prix_kg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Figure 11 - Prix en fonction du pourcentage de protéines",
+       x = "Pourcentage de protéines (%)",
+       y = "Prix au kg (€)")+
+  theme_minimal()
+
+grid.arrange(p5, p6, ncol = 2) 
+```
+
+::: {style="text-align: justify;"}
+La corrélation entre le prix et la teneur en matière grasse apparaît très faible, bien que positive. Autrement dit, une augmentation du pourcentage de matière grasse est associée à une légère hausse du prix, mais l’intensité de cette relation demeure limitée, suggérant que ce critère joue un rôle marginal dans la formation des prix.
+
+De même, la corrélation entre le prix et la teneur en protéines est faible et positive. La présence de protéines semble donc aller dans le même sens qu’une hausse du prix, mais son influence reste réduite, ce qui indique que la composition nutritionnelle n’est probablement pas un déterminant central du prix du fromage.
+:::
+
+
+```{r, echo=FALSE,message=FALSE}
+
+# Prix en fonction de la distance de transport
+
+ggplot(fromage, aes(x = distance_transport, y = Prix_kg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Figure 12 - Prix au kg en fonction de la distance de transport",
+       x = "Distance de transport (km)",
+       y = "Prix au kg (€)")+
+  theme_minimal()
+
+```
+
+::: {style="text-align: justify;"}
+Le prix au kilogramme des fromages augmente généralement avec la distance de transport. Cette relation est cohérente d’un point de vue économique, car les coûts logistiques liés au transport, au stockage et à la manutention se répercutent sur le prix final payé par le consommateur.
+:::
+
+### *Corrélation entre les variables explicatives*
+
+::: {style="text-align: justify;"}
+Parmis les corrélations importante, nous avons deux paires de variables que nous n'avons pas encore analysé :
+:::
+
+```{r, echo=FALSE,message=FALSE}
+
+# 1️⃣ Protéines en fonction de l'affinage
+p7 <- ggplot(fromage, aes(x = affinage_jour, y = protéines)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(
+    title = "Figure 13 - Pourcentage de protéines\n en fonction de la durée d'affinage",
+    x = "Affinage (jours)",
+    y = "Teneur en protéines (%)"
+  ) +
+  theme_minimal()
+```
+
+**Les protéines en fonction du pourcentage de matière grasse**
+
+```{r, echo = FALSE,message=FALSE}
+# 2️⃣ Protéines en fonction du pourcentage de matière grasse
+p8 <- ggplot(fromage, aes(x = pct_mg, y = protéines)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(
+    title = "Figure 14 - Teneur en protéines en\n fonction de la teneur en matière grasse",
+    x = "Pourcentage de matière grasse (%)",
+    y = " "
+  ) +
+  theme_minimal()
+grid.arrange(p7,p8, ncol = 2)
+```
+
+::: {style="text-align: justify;"}
+La figure 13 suggère une relation potentiellement non linéaire entre le pourcentage de protéines et la durée d’affinage, pouvant être de type quadratique ou logarithmique. Du point de vue des données, certaines limites doivent être soulignées : plusieurs variables sont fortement discrètes ou présentent des valeurs répétées, ce qui peut biaiser l’interprétation des tendances. C’est notamment le cas de la distance de transport, pour laquelle une valeur moyenne par usine a été attribuée aux produits issus de la coopérative U, réduisant la variabilité observée et pouvant masquer certaines différences locales.
+:::
+
+**La distance de transport en fonction du Label AOP**
+```{r, echo = FALSE}
+ggplot(fromage, aes(x = AOP_f,y = distance_transport)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(
+    title = "Figure 15 - Distance de transport selon le Label AOP",
+    x = "Label AOP",
+    y = "Distance de transport (km)"
+  )+
+  theme_minimal()
+```
+
+::: {style="text-align: justify;"}
+La figure 15 illustre les observations précédentes : les fromages non AOP, souvent issus de marques distributeurs, présentent une distribution plus resserrée, en partie parce que de nombreux produits se sont vus attribuer une valeur moyenne de distance, ce qui constitue une limite méthodologique de notre étude. Pour améliorer la précision, il serait nécessaire de collecter directement les informations en magasin afin de déterminer l’origine exacte de chaque produit. En revanche, les fromages AOP affichent une distribution beaucoup plus étalée, reflétant une variabilité géographique réelle liée à leur production régionale et locale.
+:::
+
+# **Analyse et discussion des résultats**
+
+## Modélisation principale
+
+::: {style="text-align: justify;"}
+  Nous présentons ci-dessous le modèle principal estimé par MCO, dans lequel la variable dépendante est le prix au kilogramme. Ce modèle vise à identifier les déterminants intrinsèques et microéconomiques du prix du fromage, notamment l’effet du label AOP, de l’affinage ou encore des caractéristiques nutritionnelles. Puis nous présenterons plusieurs modèles dérivés du principal, optimisé pour améliorer la robustesse des résultats.
+:::
+
+```{r, include=FALSE}
+modele_principal <- lm(Prix_kg ~affinage_jour + pct_mg + AOP + poids + protéines + distance_transport,data = fromage)
+modele_2 <- lm(Prix_kg ~affinage_jour + AOP + poids + protéines + distance_transport,data = fromage)
+modele_3 <- lm(Prix_kg ~affinage_jour + AOP + poids + distance_transport,data = fromage)
+```
+
+
+```{r,results='asis', echo=FALSE}
+stargazer(modele_principal, modele_2, modele_3, 
+          type = "html",
+          title = "Table 1 : Comparaison des premiers modèles",
+          dep.var.labels = c("Prix/kg", "Prix/kg", "Prix/kg"),
+          column.labels = c("Modèle 1", "Modèle 2", "Modèle 3"),
+          covariate.labels = c("Affinage (jours)",
+                               "Matière grasse (%)",
+                               "AOP (1 = oui)",
+                               "Poids (g)",
+                               "Protéines (%)",
+                               "Distance transport (km)"),
+          digits = 3)
+
+```
+
+::: {style="text-align: justify;"}
+  L’estimation du premier modèle, dans lequel le prix au kilogramme est expliqué en niveau par les caractéristiques du produit, permet d’identifier plusieurs déterminants significatifs de la formation des prix sur le marché des fromages. La qualité globale de l’ajustement est satisfaisante, avec un R² ajusté de 0,49, indiquant qu’environ 49 % de la variabilité du prix au kilo est expliquée par les variables retenues. Ce niveau de performance est cohérent avec une analyse microéconomique appliquée à des produits agroalimentaires, pour lesquels une part importante du prix dépend de facteurs difficilement observables, tels que la marque, la stratégie commerciale, la réputation ou encore la qualité perçue. Le test global de Fisher confirme la pertinence de l’estimation, la statistique F étant fortement significative, ce qui atteste de l’existence d’au moins une variable explicative exerçant un effet non nul sur le prix.
+
+  Parmi les variables continues, l’affinage apparaît comme un facteur déterminant du prix. Son coefficient est positif et significatif au seuil de 1 %, ce qui indique qu’un jour supplémentaire d’affinage est associé, toutes choses égales par ailleurs, à une augmentation moyenne d’environ deux centimes du prix au kilogramme. Cet effet est pleinement cohérent avec l’économie du fromage, dans la mesure où un affinage plus long implique une immobilisation du capital, des coûts de stockage plus élevés et des pertes d’humidité, tout en contribuant à une valorisation gustative du produit. À l’inverse, la teneur en matière grasse ne présente pas d’effet statistiquement significatif sur le prix. Cette absence de relation robuste suggère que la matière grasse constitue un critère peu discriminant dans l’échantillon étudié, possiblement en raison d’une variabilité limitée ou d’une forte corrélation avec d’autres caractéristiques structurelles des fromages.
+
+  Le label AOP ressort comme le déterminant le plus influent du modèle. Son coefficient est très significatif et indique qu’un fromage bénéficiant d’une appellation d’origine protégée est vendu en moyenne environ six euros plus cher par kilogramme qu’un fromage comparable ne disposant pas de ce label. Cette prime substantielle met en évidence le rôle central de l’AOP dans la formation des prix, en tant que signal de qualité, de réputation et d’ancrage territorial, capable de capter une large part de la valorisation économique du produit.
+
+  Le poids de l’emballage exerce quant à lui un effet négatif et significatif sur le prix au kilo. Une augmentation d’un gramme du poids est associée à une baisse moyenne de 0,008 euro du prix au kilogramme, ce qui correspond à une diminution d’environ 0,80 euro pour 100 grammes supplémentaires. Ce résultat traduit un mécanisme classique d’économies d’échelle, les grands formats étant généralement proposés à un prix unitaire plus faible que les petits conditionnements, en raison de coûts d’emballage et de distribution relativement moindres.
+
+  La teneur en protéines présente un effet négatif, significatif au seuil de 10 %, mais reste relativement faible et doit être interprétée avec prudence. Cette relation suggère que les fromages les plus riches en protéines, souvent des produits plus frais et moins affinés, tendent à être légèrement moins chers, sans que cet effet soit suffisamment robuste pour constituer un déterminant majeur du prix. Enfin, la distance de transport apparaît positivement associée au prix au kilogramme. Chaque kilomètre supplémentaire parcouru est lié à une hausse moyenne d’environ 0,004 euro du prix, soit 0,40 euro pour 100 kilomètres. Ce signe est cohérent avec la structure du marché, les fromages AOP étant fréquemment produits dans des zones rurales ou montagneuses éloignées et bénéficiant simultanément de prix plus élevés. Néanmoins, cette relation doit être interprétée avec précaution, la distance étant corrélée au label AOP, ce qui limite toute lecture strictement causale.
+
+  Dans l’ensemble, ce premier modèle met en évidence une hiérarchie claire des déterminants du prix des fromages. Le label AOP constitue de loin le principal facteur de valorisation, suivi par l’affinage et le format du produit, tandis que les variables nutritionnelles jouent un rôle secondaire. Ces résultats confirment l’importance des caractéristiques qualitatives et structurelles dans la formation des prix et justifient l’exploration de modèles alternatifs visant à affiner l’analyse des relations non linéaires et à mieux isoler les effets propres de certaines variables.
+
+ Dans un second temps, deux modèles dérivés du modèle initial ont été estimés dans l’objectif d’améliorer, ou à défaut de consolider, le pouvoir explicatif de l’estimation en supprimant progressivement les variables non significatives. Le premier de ces modèles exclut la variable de teneur en matière grasse. Cette simplification conduit à une très légère augmentation du R² ajusté, qui atteint 0,493, suggérant que l’élimination d’une variable dépourvue de pouvoir explicatif propre permet un ajustement marginalement plus efficace. Les coefficients associés aux principales variables demeurent par ailleurs très proches de ceux du modèle initial, ce qui témoigne de la robustesse globale des résultats et de la stabilité des relations mises en évidence. Enfin, dans cette spécification épurée, l’ensemble des variables explicatives retenues devient significatif au seuil de 5 %, renforçant la crédibilité statistique du modèle.
+
+  Le troisième modèle pousse cette logique de simplification plus loin en excluant à la fois la matière grasse et la teneur en protéines. Dans ce cas, le R² ajusté diminue légèrement pour s’établir à 0,477, indiquant que la suppression de la variable « protéines », bien que faiblement significative dans le modèle initial, entraîne une perte modérée d’information. Néanmoins, les effets associés au label AOP, au poids du produit et à la distance de transport restent très stables, confirmant que ces variables constituent le socle explicatif du prix au kilogramme. Ces résultats suggèrent que les caractéristiques structurelles et commerciales des fromages jouent un rôle bien plus déterminant que les dimensions strictement nutritionnelles dans la formation des prix.
+:::
+
+## Sélection du meilleur modèle sur le critère de l'AIC
+
+```{r, include = FALSE}
+library(MASS)
+# estimation du modèle complet 
+full.model <- lm(Prix_kg ~affinage_jour + pct_mg + AOP + poids + protéines + distance_transport, data = fromage)
+
+# Backward regression model
+step.model_backward <- stepAIC(full.model, direction = "backward", 
+                      trace = FALSE)
+summary(step.model_backward)
+
+# forward regression model
+step.model_forward <- stepAIC(full.model, direction = "forward", 
+                      trace = FALSE)
+summary(step.model_forward)
+
+# Stepwise regression model
+step.model_both <- stepAIC(full.model, direction = "both", 
+                      trace = FALSE)
+summary(step.model_both)
+
+```
+
+::: {style="text-align: justify;"}
+Les procédures de sélection stepwise et backward basées sur le critère AIC conduisent à un modèle dans lequel la variable représentant le pourcentage de matière grasse est exclue. Son retrait indique que son inclusion n’améliore pas suffisamment le compromis entre qualité d’ajustement et complexité du modèle. En revanche, la procédure forward ne modifie pas le modèle initial, aucune variable n’étant ajoutée ou retirée, ce qui suggère que le modèle complet constitue déjà un compromis satisfaisant entre qualité d’ajustement et complexité selon ce critère.
+
+Ces analyses nous conduisent donc à ne pas inclure la variable correspondant au pourcentage de matière grasse. En effet, nous avions précédemment observé que les variables nutritionnelles jouent un rôle relativement limité dans l’explication du prix au kilogramme au sein de notre modèle.
+:::
+
+## Robustesse des résultats
+
+::: {style="text-align: justify;"}
+Dans cette partie, nous procédons à l’étude des hypothèses des MCO afin de vérifier la robustesse et la pertinence du modèle retenu. Nous analysons le modèle 2, choisi pour son R² ajusté légèrement plus élevé et pour avoir éliminé les variables nutritionnelles non significatives, telles que la matière grasse, simplifiant ainsi l’interprétation. Les tests mobilisés incluent des diagnostics sur l’homoscédasticité, la normalité des résidus et l’influence des observations, permettant de s’assurer que les conditions d’application des MCO sont respectées.
+:::
+
+### *Étude de la normalité des résidus*
+```{r, include=FALSE}
+library(olsrr) #graohique des résidus
+library(ggplot2)
+
+p10 <- ols_plot_resid_qq(modele_2) +
+  ggtitle("Figure 16 : QQ-plot des résidus") +
+  theme_minimal()
+
+p11 <- ols_plot_resid_hist(modele_2) +
+  ggtitle("Figure 17 : Histogramme des résidus") +
+  theme_minimal()
+```
+
+```{r, echo = FALSE}
+grid.arrange(p10,p11, ncol = 2)
+```
+
+```{r, include = FALSE,echo = FALSE}
+#moyennes = 0
+# Test (H0: moyenne résidus = 0; H1: moyenne résidus <> 0)
+t.test(modele_2$residuals)
+# la moyenne estimé est de -3.875019e-17, l'intervalle de confiance [-0.8131628 ;0.8131628] contient la valeur nulle et la pvalue du test =1, au seuil de significativité de 0.1% on ne peut pas rejeter l’hypothèse que la moyenne des résidus soit nulle
+
+# test de normalité des résidus = shapiro : hypothèse nulle = normalité
+shapiro.test(modele_2$residuals)
+#sans surprise au vu du qqplot on rejette l'hypothèse de normalité des résidus
+```
+
+```{r, include = FALSE}
+# Data frame sans chèvre
+fromage_test <- fromage %>% filter(Type_lait != "chèvre")
+# Modèle sans les fromages de chèvres
+modele_2_bis <- lm(Prix_kg ~affinage_jour + AOP + poids + protéines + distance_transport,data = fromage_test)
+#moyennes = 0
+# Test (H0: moyenne résidus = 0; H1: moyenne résidus <> 0)
+t.test(modele_2_bis$residuals)
+# la moyenne estimé est de -3.875019e-17, l'intervalle de confiance [-0.8131628 ;0.8131628] contient la valeur nulle et la pvalue du test =1, au seuil de significativité de 0.1% on ne peut pas rejeter l’hypothèse que la moyenne des résidus soit nulle
+
+# test de normalité des résidus = shapiro : hypothèse nulle = normalité
+shapiro.test(modele_2_bis$residuals)
+#sans surprise au vu du qqplot on rejette l'hypothèse de normalité des résidus
+```
+
+::: {style="text-align: justify;"}
+L’analyse de la distribution des résidus met en évidence une asymétrie marquée à droite, caractérisée par une queue droite longue et la présence de quelques valeurs résiduelles très élevées. Le Q-Q plot montre un alignement satisfaisant dans la partie centrale de la distribution, mais de fortes déviations dans les quantiles élevés. Cette forme ne correspond pas à une loi du χ² au sens statistique, les résidus prenant des valeurs positives et négatives, mais traduit une asymétrie positive typique des données de prix, souvent affectées par des valeurs extrêmes et une hétérogénéité des produits.
+
+Les tests formels confirment cette observation graphique. Le test de Shapiro–Wilk conduit à rejeter clairement l’hypothèse de normalité des résidus, principalement en raison des écarts observés dans les queues de distribution. En revanche, les résidus sont correctement centrés autour de zéro, comme l’indique le test de moyenne nulle, ce qui constitue un point favorable pour la validité des estimateurs MCO : le modèle n’est pas biaisé en moyenne et l’hypothèse d’espérance conditionnelle nulle des erreurs est respectée.
+
+La non-normalité des résidus semble s’expliquer par la présence de fromages de chèvre dans l’échantillon, caractérisés par des prix au kilogramme plus élevés et une forte dispersion. Ces produits génèrent des résidus positifs importants, qui tirent la distribution vers la droite et perturbent l’hypothèse de normalité. Cette interprétation est renforcée par le fait que, lorsque l’échantillon est restreint aux fromages au lait de vache et de brebis, l’hypothèse de normalité n’est plus rejetée au seuil de 10 %, suggérant que l’hétérogénéité liée au type de lait joue un rôle central dans la distribution des erreurs.
+
+D’un point de vue économétrique, cette non-normalité n’invalide pas les estimations MCO, mais invite à la prudence dans l’interprétation des tests statistiques, notamment en présence de valeurs extrêmes. Elle justifie par ailleurs le recours à des transformations logarithmiques du prix ainsi que l’exploration de modèles alternatifs ou segmentés, afin de mieux prendre en compte l’hétérogénéité structurelle du marché fromager.
+:::
+
+```{r, echo = FALSE}
+#Residual vs fitted
+plot(modele_2, which = 1, main = "Figure 18 : Residuals vs Fitted")
+```
+
+::: {style="text-align: justify;"}
+L’examen du graphique des résidus en fonction des valeurs ajustées met en évidence plusieurs points importants concernant la spécification du modèle et l’hétérogénéité des produits. Tout d’abord, on observe une légère relation en U, signe que la relation linéaire retenue est mal spécifiée et justifie l’implémentation de modèles alternatifs, tels que des transformations log-niveau ou log-log, pour mieux capturer la non-linéarité. Ensuite, la dispersion des résidus n’est pas homogène : on note une forme de trompe, avec une variance qui augmente avec les valeurs ajustées, ce qui est courant dans les modèles expliquant des prix. Là encore, un modèle log-niveau constitue une solution potentielle pour stabiliser la variance. Enfin, certains points se détachent nettement de zéro : il s’agit de deux crotins de chèvre et d’un rocamadour, tous des fromages de chèvre frais, AOP et vendus à plus de 30 €/kg, qui génèrent des résidus fortement positifs et illustrent l’hétérogénéité structurelle du marché.
+:::
+
+### *Identification des points influents*
+
+```{r, echo = FALSE}
+## Distance de Cook: mesure l'influence d'une observation, les valeurs supérieures à 1 ou parfois à 0,5 indique un point influent
+plot(modele_2, which = 4, main = "Figure 19 : Distance de Cook")
+```
+
+```{r, echo = FALSE}
+## Un autre graphique très utile pour le diagnostic d’un éventuel point influent sur la droite de régression est le graphique des résidus standardisés selon leur levier (“Residual vs Leverage”) sur lequel on superpose les limites pour la distance de Cook. Leverage = éléments diagonaux de H = X(X'X)-1X'  Si un point sur ce graphique se situe en dehors de l’intervalle définit par les lignes en pointillées, il s’agit d’une observation influente. 
+plot(modele_2, which = 5, main = "Figure 20 : Residuals vs Leverage")
+```
+
+```{r, results='asis',echo = FALSE}
+
+# Sélectionner les points influents (IDs 21, 37, 78) et colonnes pertinentes
+points_influents <- fromage %>%
+  slice(c(21, 37, 78))  # Filtrer les 3 points
+points_influents <- points_influents[,c(1,3,4,5,8,11,12)]
+
+# Créer le flextable
+ft <- flextable(points_influents) %>%
+  autofit() %>%                    # Ajuste automatiquement la largeur des colonnes
+  theme_vanilla() %>%              # Applique un thème simple
+  bold(j = "Nom", bold = TRUE) %>%   # Met en gras la colonne Fromage
+  color(j = "AOP", color = "red") %>%   # Met la colonne AOP en bleu
+  set_caption("Tableau des points influents identifiés (Cook's Distance)")
+
+
+# Afficher le tableau
+ft
+```
+
+
+::: {style="text-align: justify;"}
+L’analyse de la distance de Cook met en évidence trois observations exerçant une influence notable sur l’estimation du modèle (observations 21, 37 et 78), dont les valeurs dépassent le seuil usuel de vigilance sans toutefois atteindre des niveaux excessifs. L’examen détaillé de ces observations montre qu’elles correspondent à des fromages présentant des caractéristiques très spécifiques au regard de l’échantillon. Il s’agit notamment de fromages à base de lait de chèvre ou de brebis, associés à des poids faibles, des durées d’affinage courtes et des prix au kilogramme particulièrement élevés. Dans certains cas, ces produits se distinguent également par des distances de transport importantes. Ces observations combinent ainsi des résidus élevés et des valeurs explicatives atypiques, ce qui explique leur influence sur l’estimation, sans qu’il soit pour autant justifié de les exclure de l’analyse, puisqu’elles reflètent des segments bien identifiés du marché fromager.
+
+Le graphique des résidus standardisés en fonction du leverage confirme cette lecture. La majorité des observations présente un faible leverage et des résidus proches de zéro, indiquant que le modèle est globalement stable et qu’aucune observation isolée ne domine l’estimation. En revanche, les observations identifiées par la distance de Cook se situent dans des zones de leverage plus élevé et affichent des résidus positifs importants, les plaçant à proximité des courbes de Cook. Ces points correspondent principalement à des fromages de chèvre frais et à certains fromages de brebis, caractérisés par une forte dispersion des prix au kilogramme. Cette configuration met en évidence une hétérogénéité structurelle liée aux caractéristiques physiques et technologiques des produits, en particulier au type de lait, et permet d’expliquer les écarts observés par rapport aux hypothèses classiques du modèle linéaire, notamment en matière de normalité et d’homoscédasticité des résidus.
+:::
+
+### *Hypothèse d'hétéroscédasticité*
+
+Le test de White est un test d’hétéroscédasticité en régression linéaire, qui vérifie si la variance des erreurs est constante ou non.
+
+```{r, include = FALSE}
+# Test de White pour l'hétéroscédasticité
+#install.packages("lmtest")
+library(lmtest)
+
+# Récupération des résidus du modèle initial
+residM2 <- modele_2$residuals^2
+
+# Test de Breusch-Pagan : version simplifiée du test de White
+# On estime les résidus au carré en fonction des variables explicatives
+Modresbp <- lm(Prix_kg ~ affinage_jour + pct_mg + AOP + poids + protéines + distance_transport,
+               data = fromage)
+
+# Résumé du modèle
+summary(Modresbp)
+
+# Calcul de la statistique de test BP
+BPstat <- summary(Modresbp)$r.squared * 125
+BPstat
+
+# Ou utilisation directe de la fonction bptest()
+bptest(modele_2)
+
+# Test de White :
+White_test_auto <- function(modele, data, vars_quanti) {
+  library(lmtest)
+  
+  # Création des termes au carré
+  squares <- paste0("I(", vars_quanti, "^2)")
+  
+  # Création des interactions croisées
+  interactions <- combn(vars_quanti, 2, 
+                         FUN = function(x) paste(x, collapse = "*"))
+  
+  # Construction de la formule du test de White
+  white_formula <- as.formula(
+    paste("~", paste(c(vars_quanti, squares, interactions), collapse = " + "))
+  )
+  
+  # Test de White
+  bptest(modele, white_formula, data = data)
+}
+
+vars_quanti <- c("affinage_jour", "poids","pct_mg", "protéines", "distance_transport")
+
+
+White_test_auto(modele_principal,fromage,vars_quanti)
+```
+
+::: {style="text-align: justify;"}
+Le test de Breusch-Pagan a été réalisé pour vérifier l’hypothèse d’homoscédasticité des résidus du modèle. L’hypothèse nulle (H₀) stipule que les résidus ont une variance constante, tandis que l’hypothèse alternative (H₁) indique la présence d’hétéroscédasticité, c’est-à-dire une variance non constante. Le test fournit une statistique BP égale à 3,36 avec 6 degrés de liberté et une p-value de 0,7628. Comme cette valeur est largement supérieure au seuil de 5 %, on ne rejette pas H₀, ce qui suggère que les résidus peuvent être considérés comme homogènes et que l’une des conditions essentielles des moindres carrés ordinaires est respectée.
+
+Pour confirmer ce résultat, nous avons également réalisé le test de White sur l’ensemble des données du modèle, qui fournit une p-value de 0,46. Cette analyse renforce la conclusion : les résidus sont homogènes et il n’existe pas d’hétéroscédasticité significative. Étant donné cette absence d’hétéroscédasticité, il n’a pas été nécessaire de recourir au test de Goldfeld–Quandt.
+:::
+
+### *Hypothèse de non-autorcorrélation des résidus*
+
+```{r, include = FALSE}
+library(lmtest)
+dwtest(modele_principal)
+
+```
+
+::: {style="text-align: justify;"}
+Bien que le test de Durbin-Watson ait été appliqué, nos données étant cross-section (chaque fromage représente une observation indépendante), l’autocorrélation des résidus n’est pas pertinente. La p-value obtenue (0,46) confirme l’absence de corrélation entre les résidus.
+
+L’analyse par moindres carrés ordinaires (MCO) a permis d’estimer l’effet des variables explicatives sur le prix au kilogramme des fromages. Les principales hypothèses des MCO ont été vérifiées : les résidus sont homogènes (tests de Breusch-Pagan et White non significatifs) . La normalité des résidus a été évaluée à l’aide du test de Shapiro-Wilk. Pour le modèle principal incluant l’ensemble des fromages, la normalité n'est pas acceptable, cependant lorsque nous supprimont les fromages à avec du lait de chèvre, la normalité est alors globalement acceptable. Concernant l’indépendance des erreurs, le test de Durbin-Watson a été appliqué avec comme hypothèses : H₀ : absence d’autocorrélation des résidus, H₁ : présence d’autocorrélation. La p-value élevée obtenue (0,46) indique que l’on ne rejette pas H₀. Étant donné que les données sont cross-section et non temporelles, aucune autocorrélation n’est à signaler. Ainsi, les coefficients estimés peuvent être interprétés de manière fiable et le modèle fournit une base solide pour comprendre l’influence des facteurs tels que l’affinage, le poids, la teneur en protéines ou le type de lait sur le prix des fromages.
+:::
+
+## Analyses complémentaires
+
+### *Transformation de variables / effets non linéaires*
+
+::: {style="text-align: justify;"}
+  À la suite des modèles estimés en niveau, l’analyse des statistiques descriptives a mis en évidence certaines relations qui ne semblaient pas pleinement capturées par une spécification linéaire classique. En particulier, la relation entre le prix au kilogramme et le poids des produits apparaît négative et non linéaire, tandis que la distribution du prix selon la durée d’affinage présente une dispersion importante et des valeurs extrêmes. Ces constats motivent l’estimation de modèles alternatifs intégrant des transformations logarithmiques. L’objectif est double : améliorer la qualité de l’ajustement en stabilisant la variance de la variable dépendante et proposer des spécifications mieux adaptées à des relations proportionnelles, tout en facilitant l’interprétation économique des coefficients. Trois modèles supplémentaires sont ainsi estimés, combinant une transformation logarithmique du prix et, selon les cas, des transformations logarithmiques de certaines variables explicatives.
+:::
+
+```{r, include = FALSE}
+modele_4 <- lm(log(Prix_kg) ~affinage_jour + pct_mg + AOP + poids + protéines + distance_transport,data = fromage)
+modele_5 <- lm(log(Prix_kg) ~affinage_jour + pct_mg + AOP + log(poids) + protéines + distance_transport,data = fromage)
+modele_6 <- lm(log(Prix_kg) ~log(affinage_jour) + pct_mg + AOP + log(poids) + protéines + distance_transport,data = fromage)
+```
+
+```{r,results='asis', echo = FALSE}
+stargazer(modele_4, modele_5, modele_6, 
+          type = "html",
+          title = "Table 2 : Comparaison d'autres modèles de régression",
+          dep.var.labels = c("log(Prix/kg)", "log(Prix/kg)", "log(Prix/kg)"),
+          column.labels = c("Modèle 4", "Modèle 5", "Modèle 6"),
+          covariate.labels = c("Affinage (jours)",
+                               "Log(Affinage)",
+                               "Matière grasse (%)",
+                               "AOP (1 = oui)",
+                               "Poids (g)",
+                               "Log(Poids)",
+                               "Protéines (%)",
+                               "Distance transport (km)"),
+          digits = 3)
+```
+::: {style="text-align: justify;"}
+  Les résultats globaux montrent une amélioration nette de la qualité des modèles par rapport aux spécifications en niveau. Les trois modèles sont globalement significatifs, et les R² ajustés se situent entre 0,54 et 0,58, indiquant que plus de la moitié de la variance du prix au kilogramme est désormais expliquée. Le modèle 5 se distingue par le meilleur pouvoir explicatif et la plus faible erreur résiduelle, suggérant une spécification particulièrement bien adaptée aux données.
+
+  Les principaux résultats confirment et affinent les enseignements des modèles précédents. Le label AOP conserve un effet positif et très significatif dans toutes les spécifications. Dans les modèles intégrant une transformation logarithmique du prix, cet effet s’interprète comme une prime comprise entre 38 % et 41 %, ce qui confirme le rôle central du label dans la valorisation des fromages, indépendamment des autres caractéristiques observables. Le poids apparaît comme un déterminant clé lorsque sa relation non linéaire est correctement prise en compte. Dans les modèles log-log, son coefficient est stable et fortement significatif, traduisant un effet d’élasticité négatif : une augmentation du poids entraîne une baisse proportionnelle du prix au kilogramme. Cette spécification met clairement en évidence un mécanisme d’économies d’échelle, déjà suggéré par l’analyse descriptive, mais désormais quantifié de manière économiquement intuitive.
+
+  L’affinage conserve un effet positif lorsque la variable est introduite en niveau, confirmant son rôle dans la formation du prix, mais cet effet demeure modéré. En revanche, sa transformation logarithmique conduit à une perte de significativité, ce qui suggère que l’impact de l’affinage sur le prix n’est pas proportionnel et que les valeurs extrêmes perturbent l’estimation dans une spécification entièrement log-log. La distance de transport reste positive et significative dans l’ensemble des modèles, y compris après transformation, ce qui est cohérent avec l’existence de coûts logistiques croissants et avec la localisation géographique spécifique de certains fromages, notamment sous AOP. Enfin, les variables nutritionnelles confirment leur rôle secondaire : la matière grasse n’apparaît jamais significative, tandis que la teneur en protéines présente une significativité fragile qui disparaît dans les spécifications log-log.
+
+  La comparaison des trois modèles transformés conduit à privilégier le modèle 5 comme modèle de référence. Celui-ci offre le meilleur compromis entre qualité d’ajustement, stabilité des coefficients et interprétation économique claire, en particulier grâce à l’introduction du logarithme du poids. Le modèle 6, bien que conceptuellement pertinent, est pénalisé par la non-significativité de l’affinage sous forme logarithmique, probablement liée à la distribution asymétrique de cette variable. Ces résultats confirment l’intérêt des transformations logarithmiques pour mieux rendre compte des mécanismes de formation du prix et renforcent l’idée que les dimensions de label, de format et d’origine constituent les déterminants majeurs du prix au kilogramme des fromages.
+:::
+
+```{r,results='asis', echo = FALSE}
+
+modele_7 <- lm(Prix_kg ~affinage_jour + pct_mg + poids + protéines + distance_transport,data = fromage)
+modele_8 <- lm(log(Prix_kg) ~affinage_jour + pct_mg + log(poids) + protéines + distance_transport,data = fromage)
+
+stargazer(modele_7, modele_8,
+          type = "html",
+          title = "Table 3 : Comparaison d'autres modèles de régression",
+          dep.var.labels = c("Prix/kg", "Log(Prix/kg"),
+          column.labels = c("Modèle 7", "Modèle 8"),
+          covariate.labels = c("Affinage (jours)",
+                               "Matière grasse (%)",
+                               "Poids (g)",
+                               "Log(Poids)",
+                               "Protéines (%)",
+                               "Distance transport (km)"),
+          digits = 3)
+```
+
+::: {style="text-align: justify;"}
+  D'un autre côté, des modèles ont été estimés en excluant la variable AOP afin d’approfondir l’analyse des mécanismes de formation du prix. L’objectif de cette démarche est avant tout analytique : il s’agit de désagréger la prime associée au label AOP pour observer plus finement les effets propres des caractéristiques physiques et techniques des fromages. Dans les modèles précédents, l’AOP présentait un coefficient élevé et fortement significatif et se révélait corrélée à plusieurs variables clés, telles que la durée d’affinage, le format des produits ou la distance de transport. Elle captait ainsi une part importante de la variance du prix, susceptible de masquer certains effets structurels. En supprimant cette variable, on accepte volontairement une perte de pouvoir explicatif, mais on gagne en lisibilité quant aux déterminants microéconomiques sous-jacents.
+
+  Comme attendu, la qualité d’ajustement des modèles sans AOP se dégrade sensiblement. Les R² observés sont nettement inférieurs à ceux des modèles incluant le label, ce qui confirme que l’AOP constitue un déterminant central du prix des fromages et qu’un modèle qui l’exclut ne saurait décrire fidèlement le fonctionnement réel du marché. Cette baisse de performance ne remet toutefois pas en cause l’intérêt de ces estimations, qui doivent être interprétées comme des outils exploratoires et complémentaires plutôt que comme des modèles concurrents des spécifications principales.
+
+  L’analyse des coefficients permet néanmoins de dégager plusieurs enseignements supplémentaires. L’affinage conserve un effet positif et significatif dans les deux modèles sans AOP, ce qui indique qu’il exerce un impact propre sur le prix, indépendamment du label. Son rôle apparaît même plus clairement identifié en l’absence de l’AOP, suggérant que son effet était en partie confondu avec celui du label dans les modèles précédents. Le poids du produit, en particulier lorsqu’il est introduit sous forme logarithmique, devient un déterminant majeur du prix. L’élasticité négative estimée met en évidence un effet d’économies d’échelle marqué : l’augmentation du format entraîne une baisse proportionnelle importante du prix au kilogramme. Cet effet, déjà présent auparavant, était partiellement atténué par les spécificités des formats associés aux fromages AOP.
+
+  La distance de transport apparaît également comme un facteur robuste et significatif dans ces modèles. Son coefficient est plus élevé que dans certaines spécifications incluant l’AOP, ce qui suggère que l’effet logistique était en partie absorbé par la prime du label dans les modèles précédents. En l’absence de l’AOP, la distance reflète plus directement un coût technique crédible lié au transport et à la distribution des produits. À l’inverse, les variables nutritionnelles, telles que la teneur en matière grasse et en protéines, demeurent non significatives, confirmant de manière robuste leur rôle marginal dans la formation des prix une fois les autres caractéristiques prises en compte.
+
+  Bien que ces modèles sans AOP ne présentent pas les meilleures performances statistiques, ils apportent un éclairage essentiel sur la structure des déterminants du prix. Ils confirment empiriquement que le label AOP concentre une large part de la valeur économique des fromages, tout en montrant que certaines variables, comme le poids, la distance ou l’affinage, exercent un effet propre et indépendant. La comparaison entre les modèles avec et sans AOP renforce ainsi la légitimité du modèle principal et souligne qu’une spécification pertinente doit inclure le label pour refléter la réalité du marché, tout en mobilisant des modèles alternatifs pour comprendre finement les mécanismes microéconomiques à l’œuvre.
+:::
+
+### *Changement structurel*
+
+```{r, include = FALSE}
+# test de chow à la main
+fromage_aop <-fromage[fromage$AOP == 1,]
+fromage_non_aop <-fromage[fromage$AOP == 0,]
+# Test de Chow
+modele_complet <- lm(Prix_kg ~affinage_jour + pct_mg + poids + protéines + distance_transport,data = fromage)
+sous_modele1 <- lm(Prix_kg ~affinage_jour + pct_mg + poids + protéines + distance_transport,data = fromage_aop)
+sous_modele2 <- lm(Prix_kg ~affinage_jour + pct_mg + poids + protéines + distance_transport,data = fromage_non_aop)
+SCR_etoile <-  sum(modele_complet$residuals^2)
+SCR1 <- sum(sous_modele1$residuals^2)
+SCR2 <- sum(sous_modele2$residuals^2)
+N <-length(fromage$Nom)
+K <-  5
+f_obs_num <- (SCR_etoile - (SCR1 + SCR2))/K
+f_obs_den <- (SCR1 + SCR2)/(N-2*K)
+f_obs <- f_obs_num/f_obs_den
+f_tab <-  qf(0.95,K,N-2*K)
+1-pf(f_obs,K,N-2*K)
+f_obs > f_tab
+```
+```{r,include = FALSE}
+# test de chow automatisé (repris du projet de régression linéaire de l'an passé)
+library(strucchange)
+# Trier les données par AOP
+nat_sorted <- fromage[order(fromage$AOP), ]
+
+# Trouver le point de coupure
+# Ici, on suppose que l'on veut faire la coupure après le premier pays avec AOP = 1
+chow_point <- which(fromage$AOP == 1)[1]
+
+# Test de Chow avec le point de coupure
+chow_test <- sctest(Prix_kg ~affinage_jour + pct_mg + poids + protéines + distance_transport,
+                     data = fromage, 
+                     type = "Chow", 
+                     point = chow_point)
+
+# Affichage des résultats du test de Chow
+chow_test
+
+#Si la p-value est faible (< 0.05) → Les coefficients sont significativement différents entre les groupes.
+#Si la p-value est élevée (> 0.05) → On ne rejette pas l'hypothèse que les coefficients sont égaux.
+```
+
+::: {style="text-align: justify;"}
+Le test de Chow met en évidence l’existence d’une rupture structurelle entre les fromages AOP et non AOP. La statistique de test est fortement significative (F = 6,57 ; p-value = 7,7e-06), ce qui conduit à rejeter l’hypothèse nulle d’égalité des coefficients entre les deux groupes. Cela signifie que les relations entre le prix au kilogramme et les caractéristiques des fromages, telles que l’affinage, le poids ou la distance de transport, diffèrent selon le statut AOP. Le label AOP ne se limite donc pas à générer une simple prime de prix moyenne, mais modifie plus largement la structure de formation des prix. Dans ce contexte, l’estimation d’un modèle unique imposant des effets identiques pour les fromages AOP et non AOP apparaît restrictive. Une approche plus souple et économiquement pertinente consiste dès lors à introduire des termes d’interaction entre l’AOP et certaines variables explicatives, afin de mieux capter cette hétérogénéité.
+:::
+
+### *Effets croisés de variables*
+
+::: {style="text-align: justify;"}
+Le modèle suivant prolonge le modèle principal en introduisant des termes d’interaction entre le label AOP et plusieurs variables quantitatives clés, afin d’examiner si les déterminants du prix au kilogramme diffèrent selon le statut AOP du fromage.
+
+$$
+\begin{aligned}
+Prixkg &= \beta_0 + \beta_1 Affinage + \beta_2 Poids + \beta_3 PCTProtéines \\
+  &\quad  + \beta_4 DistanceTransport + \beta_5 AOP + \beta_6 (AOP*Affinage) \\
+  &\quad + \beta_7 (AOP*Poids) + \beta_8 (AOP*Protéines) + \beta_9 (AOP*Transport) + \epsilon
+\end{aligned}
+$$
+
+Dans ce cadre, les coefficients associés aux variables quantitatives mesurent les effets pour les fromages non AOP, tandis que les coefficients des termes d’interaction capturent la différence d’effet entre fromages AOP et non AOP pour chacune des variables considérées.
+:::
+
+```{r, include = FALSE}
+modele_croise <- lm(Prix_kg ~affinage_jour + poids + protéines + distance_transport + AOP + (affinage_jour*AOP) + (poids*AOP) + (protéines*AOP) + (distance_transport*AOP),data = fromage)
+```
+
+```{r,results='asis', echo = FALSE}
+stargazer(modele_croise,
+          type = "html",
+          title = "Table 4 : Modèle effet croisé de variables",
+          dep.var.labels = c("Prix/kg"),
+          column.labels = c("Modèle 9"),
+          covariate.labels = c("Affinage (jours)",
+                               "Poids (g)",
+                               "Protéines (%)",
+                               "Distance transport (km)",
+                               "AOP",
+                               "AffinagexAOP",
+                               "PoidsxAOP",
+                               "ProtéinesxAOP",
+                               "DistancexAOP"),
+          digits = 3)
+```
+
+::: {style="text-align: justify;"}
+Ce dernier modèle introduit des interactions avec la variable AOP afin de tester si les déterminants du prix au kilogramme agissent différemment selon que le fromage est AOP ou non. Il ne s’agit pas d’un modèle de prévision, mais d’un modèle de test, dont l’objectif est d’identifier d’éventuelles différences de pente entre les deux segments. Les coefficients “simples” s’interprètent donc pour les fromages non AOP, tandis que les termes d’interaction mesurent l’écart d’effet pour les fromages AOP.
+
+Les résultats confirment d’abord l’existence d’une prime AOP très élevée. À caractéristiques identiques (affinage, poids, protéines et distance de transport), d'après ce modèle un fromage AOP est en moyenne environ 18 € plus cher par kilogramme qu’un fromage non AOP. Cet effet est significatif et cohérent avec l’ensemble des estimations précédentes, ce qui confirme le rôle central du label comme signal de qualité et de valorisation économique.
+
+Concernant les fromages non AOP, certaines variables techniques conservent un effet significatif. La teneur en protéines présente un coefficient négatif, significatif au seuil de 10 %. À composition comparable, une hausse d’un point de pourcentage de protéines est associée à une baisse d’environ 0,27 € du prix au kilogramme. Cet effet, relativement faible, peut s’expliquer par le fait que les fromages plus protéinés sont souvent des produits plus standards ou plus industriels. La distance de transport exerce également un effet positif et significatif : pour les fromages non AOP, une augmentation de 100 kilomètres est associée à une hausse moyenne d’environ 0,60 € par kilogramme, toutes choses égales par ailleurs. Ce résultat est cohérent avec l’existence de coûts logistiques croissants.
+
+En revanche, la majorité des interactions avec l’AOP ne sont pas significatives. L’effet de l’affinage et celui de la distance de transport ne diffèrent pas de manière significative entre les fromages AOP et non AOP, ce qui suggère que ces mécanismes jouent de façon similaire dans les deux segments. De même, l’effet des protéines ne varie pas selon le statut AOP.
+
+Un seul effet croisé ressort nettement : celui du poids. L’interaction entre le poids et l’AOP est négative et significative, indiquant que la baisse du prix au kilogramme liée à l’augmentation du format est plus marquée pour les fromages AOP. Autrement dit, les économies d’échelle sont plus fortes dans le segment AOP que dans le segment non AOP.
+
+Dans l’ensemble, ce modèle avec interactions n’améliore pas la qualité d’ajustement et reste plus complexe sans gain explicatif majeur. Il montre toutefois que l’AOP agit principalement comme une prime de niveau, sans modifier profondément les mécanismes de formation du prix. À l’exception de l’effet du poids, les déterminants techniques du prix sont globalement similaires entre fromages AOP et non AOP. Ce modèle est donc informatif sur le plan analytique, mais n’est pas retenu comme modèle de référence.
+:::
+
+
+# **Conclusion générale et perspectives**
+
+## Résumé des principaux résultats
+
+::: {style="text-align: justify;"}
+L’objectif de ce travail était d’analyser les déterminants du prix au kilogramme des fromages vendus en grande distribution, en s’intéressant particulièrement au rôle du label AOP et à l’influence de caractéristiques intrinsèques telles que le poids, l’affinage, la composition nutritionnelle ou la distance de transport. Pour répondre à cette problématique, une base de données originale a été constituée manuellement à partir d’informations produits, puis exploitée au moyen de régressions linéaires estimées par la méthode des moindres carrés ordinaires. Différentes spécifications ont été considérées, incluant des modèles en niveau, log-niveau et log-log, ainsi que plusieurs tests statistiques (tests F et t, test de Chow, diagnostics de résidus, mesures d’influence).
+
+Les principaux résultats mettent en évidence plusieurs régularités robustes. Tout d’abord, l’obtention du label AOP est associée à une prime de prix nette et statistiquement très significative, confirmant l’importance économique de la certification d’origine. Ensuite, le poids du produit exerce un effet décroissant sur le prix au kilogramme, ce qui suggère la présence d’économies d’échelle : les fromages vendus en petits formats sont proportionnellement plus chers. L’affinage présente globalement un effet positif sur le prix, bien que sa significativité dépende des spécifications retenues. La distance de transport est également positivement corrélée au prix, résultat cohérent avec l’existence de coûts logistiques et, possiblement, avec une valorisation des produits d’origine plus lointaine. En revanche, les variables de composition (taux de protéines et matières grasses) présentent des effets faibles ou instables. Les modèles logarithmiques se sont révélés mieux ajustés et ont contribué à réduire l’hétéroscédasticité. Enfin, le test de Chow montre que les coefficients diffèrent significativement entre fromages AOP et non AOP, ce qui suggère une segmentation du marché et des mécanismes de formation des prix distincts selon le statut AOP.
+:::
+
+## Limites de l’étude
+
+::: {style="text-align: justify;"}
+Plusieurs limites doivent toutefois être soulignées. Elles concernent d’abord les données utilisées. L’échantillon reste de taille modeste (108 observations), suffisant pour une analyse exploratoire, mais restreint pour des études fines par sous-catégories (type de lait, famille de fromage, AOP/non-AOP). La base a été constituée manuellement, ce qui peut introduire des erreurs de mesure et conduit à l’absence de dimension temporelle : les prix correspondent à une date donnée et ne prennent pas en compte promotions ou variations saisonnières. De plus, certains segments sont sur- ou sous-représentés : les fromages de vache dominent, tandis que les fromages de chèvre et de brebis sont peu nombreux mais souvent très chers, générant valeurs extrêmes et asymétrie des distributions.
+
+Des limites économétriques apparaissent également. Les tests et graphiques de normalité montrent des résidus non normaux, principalement tirés par quelques produits atypiques (fromages de chèvre frais et certains AOP chers). Des points influents sont identifiés par les distances de Cook et les graphiques leverage, sans qu’il s’agisse pour autant d’erreurs de mesure : ils correspondent à des produits réels et spécifiques du marché. L’hétéroscédasticité observée dans les résidus justifie le recours aux transformations logarithmiques, mais elle ne disparaît pas totalement. Enfin, des corrélations importantes entre AOP, affinage et distance suggèrent une multicolinéarité partielle, expliquant l’instabilité de certains coefficients selon les modèles.
+
+Les limites tiennent aussi à la spécification du modèle. Plusieurs variables potentiellement importantes ne sont pas observées : prix du lait selon l’espèce, coûts de production, prix de l’énergie, positionnement marketing, notoriété de marque, appréciations des consommateurs ou scores de qualité sensorielle. La variable AOP concentre une grande partie de la variance des prix et peut masquer des effets propres d’autres caractéristiques. Le test de Chow confirme d’ailleurs que les mécanismes de formation des prix diffèrent entre fromages AOP et non AOP : un modèle unique appliqué à l’ensemble des produits constitue donc une approximation.
+
+Enfin, les résultats doivent être interprétés avec prudence d’un point de vue causal. Le dispositif empirique est transversal et descriptif : il met en évidence des corrélations conditionnelles, mais ne permet pas de conclure à des effets causaux stricts. La variable de distance de transport, par exemple, reste une approximation reposant sur hypothèses logistiques simplificatrices.
+:::
+
+## Apports et perspectives
+
+::: {style="text-align: justify;"}
+Ce travail présente plusieurs contributions. Il repose d’abord sur la constitution d’une base de données originale, construite manuellement à partir d’informations produits. Cette base permet de proposer une analyse microéconomique du prix du fromage en grande distribution, centrée sur des caractéristiques intrinsèques rarement observées simultanément (poids, affinage, composition, distance de transport).L’étude met en évidence et quantifie une prime associée au label AOP, montrant que la certification d’origine joue un rôle central dans la formation des prix. Elle éclaire également l’effet d’autres déterminants, notamment le poids du produit, la durée d’affinage et la distance parcourue, et compare plusieurs spécifications économétriques, en particulier des modèles en niveau et en logarithme. Enfin, elle montre que le marché n’est pas homogène et ouvre la voie à une segmentation entre fromages AOP et non AOP ou selon le type de lait.
+
+Plusieurs prolongements naturels peuvent être envisagés. Le premier concerne les données : élargir la base à d’autres enseignes, augmenter le nombre de références et introduire une dimension temporelle permettrait d’étudier la dynamique des prix et l’effet des promotions à l’aide de données de panel. Ensuite, des modèles estimés séparément pour certaines sous-populations (AOP vs non AOP, types de lait : vache, brebis, chèvre) permettraient de mieux prendre en compte l’hétérogénéité structurelle du marché mise en évidence dans ce travail. L’intégration d’informations supplémentaires, telles que la distinction marques nationales / MDD, la présence de promotions ou la taille des formats, enrichirait aussi l’analyse.
+
+Sur le plan méthodologique, des approches alternatives pourraient être mobilisées au fur et à mesure du développement de nos compétences. Enfin, l’introduction de variables de qualité non observée (caractéristiques sensorielles, notes d’experts, évaluations des consommateurs...) permettrait d’approcher plus finement la valeur perçue par les acheteurs.
+:::
+
+# **Bibliographie - Source des données**
+::: {style="text-align: justify;"}
+-   [L'édition 2025 des « Chiffres Clés » de l'INAO et du CNAOL](https://www.inao.gouv.fr/sites/default/files/2024-11/Chiffres-clés-laitier-AOP-IGP-2024.pdf) fournit un panorama factuel et détaillé du marché des produits laitiers français sous Signes Officiels d'Identification de la Qualité et de l'Origine (SIQO), notamment les 46 Appellations d'Origine Protégée (AOP) fromagères. L'étude établit l'importance de ce segment, qui représentait 202 503 tonnes commercialisées en 2024 pour un chiffre d'affaires de 2,43 milliards d'euros. Ce document est crucial pour notre projet car il quantifie la valeur économique de la qualité : il confirme que les fromages AOP se sont vendus en moyenne 6,94 €/kg de plus que les fromages non-AOP en 2024. Cette donnée valide notre hypothèse centrale sur le rôle déterminant des attributs de qualité dans la formation du prix hédonique. Cependant, ce rapport introduit un point d'attention essentiel concernant la méthode de commercialisation : 40 % des volumes AOP sont vendus à la coupe en Grandes et Moyennes Surfaces (GMS), contre seulement 8 % pour les fromages non-AOP. Cette forte disparité nous enjoint d'intégrer le canal de distribution (coupe vs. libre-service) dans notre modèle de régression hédonique pour éviter un biais de variable omise. L'analyse des données de distribution ouvre ainsi la voie à une extension possible de notre étude en cherchant à décomposer la prime de prix AOP entre l'effet qualité intrinsèque du produit et l'effet service de la coupe associé à une expérience d'achat haut de gamme.
+:::
+
+::: {style="text-align: justify;"}
+-   [L'étude de Shan Shan (2024)](https://arxiv.org/pdf/2403.04231), intitulée « Identification des facteurs socioéconomiques influençant la sécurité alimentaire mondiale à l'aide de l'apprentissage automatique », constitue une référence méthodologique pertinente pour notre travail, malgré son échelle macro-économique. L'auteur y démontre que la modélisation des prix alimentaires mondiaux est plus efficacement réalisée par des outils d'apprentissage automatique, comme la Régression Ridge et la Régression à Vecteurs de Support (SVR), qui surperforment la régression linéaire traditionnelle en raison de la complexité et des relations non linéaires inhérentes aux facteurs socioéconomiques. Ce résultat soulève un point d'attention majeur pour notre projet de régression sur les prix du fromage : il nous alerte sur le risque de simplification excessive. Étant donné que le prix au kilo est une fonction des caractéristiques de qualité (AOP, affinage, matière grasse), il est essentiel de procéder à des vérifications rigoureuses des hypothèses du modèle par Moindres Carrés Ordinaires (MCO), et d'explorer les interactions entre nos variables explicatives. De ce fait, cette étude ouvre la voie à une extension possible de notre analyse, en suggérant d'utiliser d'autres modèles de machine learning pour plus de robustesse. 
+:::
+
+\`
