@@ -1,0 +1,21 @@
+---
+title: "Magistère"
+format: html
+editor: visual
+---
+
+```{r}
+donnees <- read.csv("fr-esr-insertion_professionnelle-master.csv", sep = ";", dec= ",",stringsAsFactors = TRUE)
+```
+
+```{r}
+liste_nom <- c("Annee","Diplome","Num_Etabl","Nom_Etabl","Etabl_actuel","Code_Acad","Nom_Acad","Code_Domaine","Nom_Domaine","Code_Discipline","Nom_Discipline","Situation","Remarque","Nb_rep","Tx_rep","Poids_discipline","Tx_insertion","Tx_emploi","Tx_emploi_salarie_en_fr","Part_emploi_cadre_ou_PI","Part_emplois_stables","Part_emplois_tmps_plein","Salaire_net_med_tmps_plein","Salaire_brut_annuel_estim","Part_diplomes_boursiers","Tx_chomage_regional","Salaire_net_mens_med_regional","Part_emplois_cadre","Part_emplois_ext_region_univ","Part_femmes","Salaire_net_mens_1_quartile","Salaire_net_mens_3_quartile","Cle_etabl","Cle_discipline","Id_Paysage")
+length(liste_nom)
+ncol(donnees)
+```
+
+On change le noms des colonnes de la bdd pour faciliter les appels :
+
+```{r}
+colnames(donnees) <- liste_nom
+```

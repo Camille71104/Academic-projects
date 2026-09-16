@@ -1,0 +1,506 @@
+---
+title: "stat des générales"
+format: html
+editor: visual
+---
+
+## Importation des bdd :
+
+```{r}
+library(dplyr)
+donnees_domaine <- read.csv("donnees_generales.csv", stringsAsFactors = TRUE, row.names = "X")
+```
+
+### Correction classes :
+
+```{r}
+donnees_domaine$Salaire_net_mens_1_quartile[239] <- 1490
+donnees_domaine$Salaire_net_mens_1_quartile[199] <- 1490
+donnees_domaine$Salaire_net_mens_1_quartile <- as.numeric(as.character(donnees_domaine$Salaire_net_mens_1_quartile))
+summary(donnees_domaine)
+```
+## Stats des :
+```{r}
+library(dplyr)
+library(tibble)
+library(tidyr)
+library(flextable)
+
+# Calcul du tableau récapitulatif avec les nouveaux noms de variables
+recap <- tibble(
+  Variable = c("Taux d'insertion", "% de boursiers", "Salaire médian",
+               "% emplois cadre", "% de femmes"),
+  
+  Moyenne = c(
+    mean(donnees_domaine$Tx_insertion, na.rm = TRUE),
+    mean(donnees_domaine$Part_diplomes_boursiers, na.rm = TRUE),
+    mean(donnees_domaine$Salaire_net_mens_med_regional, na.rm = TRUE),
+    mean(donnees_domaine$Part_emplois_cadre, na.rm = TRUE),
+    mean(donnees_domaine$Part_femmes, na.rm = TRUE)
+  ),
+  
+  Ecart_type = c(
+    sd(donnees_domaine$Tx_insertion, na.rm = TRUE),
+    sd(donnees_domaine$Part_diplomes_boursiers, na.rm = TRUE),
+    sd(donnees_domaine$Salaire_net_mens_med_regional, na.rm = TRUE),
+    sd(donnees_domaine$Part_emplois_cadre, na.rm = TRUE),
+    sd(donnees_domaine$Part_femmes, na.rm = TRUE)
+  ),
+  
+  Mediane = c(
+    median(donnees_domaine$Tx_insertion, na.rm = TRUE),
+    median(donnees_domaine$Part_diplomes_boursiers, na.rm = TRUE),
+    median(donnees_domaine$Salaire_net_mens_med_regional, na.rm = TRUE),
+    median(donnees_domaine$Part_emplois_cadre, na.rm = TRUE),
+    median(donnees_domaine$Part_femmes, na.rm = TRUE)
+  ),
+  
+  Min = c(
+    min(donnees_domaine$Tx_insertion, na.rm = TRUE),
+    min(donnees_domaine$Part_diplomes_boursiers, na.rm = TRUE),
+    min(donnees_domaine$Salaire_net_mens_med_regional, na.rm = TRUE),
+    min(donnees_domaine$Part_emplois_cadre, na.rm = TRUE),
+    min(donnees_domaine$Part_femmes, na.rm = TRUE)
+  ),
+  
+  Max = c(
+    max(donnees_domaine$Tx_insertion, na.rm = TRUE),
+    max(donnees_domaine$Part_diplomes_boursiers, na.rm = TRUE),
+    max(donnees_domaine$Salaire_net_mens_med_regional, na.rm = TRUE),
+    max(donnees_domaine$Part_emplois_cadre, na.rm = TRUE),
+    max(donnees_domaine$Part_femmes, na.rm = TRUE)
+  )
+) %>%
+  # Arrondir à 2 chiffres toutes les colonnes sauf "Variable"
+  mutate(across(-Variable, ~ round(.x, 2))) %>%
+  # Passage en format long puis large pour avoir les stats en ligne
+  pivot_longer(-Variable, names_to = "Statistique", values_to = "Valeur") %>%
+  pivot_wider(names_from = Variable, values_from = Valeur)
+
+# Affichage avec flextable
+flextable(recap) 
+```
+
+
+
+## BDD générale :
+
+```{r}
+resume_moyennes <- donnees_domaine %>%
+  group_by(Nom_Domaine) %>%  # Regroupe les données par domaine
+  summarise(across(where(is.numeric), mean, na.rm = TRUE)) 
+resume_moyennes <- resume_moyennes %>% select(-c("Annee","Tx_rep","Part_emploi_cadre_ou_PI","Part_emplois_stables","Salaire_net_mens_1_quartile","Salaire_net_mens_3_quartile","Tx_chomage_regional"))
+resume_moyennes <- resume_moyennes %>%
+  mutate(across(where(is.numeric), round, digits = 2))
+resume_moyennes
+```
+
+```{r}
+#install.packages("flextable")
+library(flextable)
+
+# Renommage des colonnes avant la création du flextable
+resume_moyennes <- resume_moyennes %>%
+  setNames(c("Domaine d'étude", "Taux d'insertion", "% de boursiers", "Salaire median", "% emplois cadre", "% de femmes"))
+
+# Création du flextable
+flextable(resume_moyennes)
+
+```
+
+Pareil pour les disciplines :
+
+```{r}
+resume_moyennes_disciplines <- donnees_domaine %>%
+  group_by(Nom_Discipline) %>%  # Regroupe les données par domaine
+  summarise(across(where(is.numeric), mean, na.rm = TRUE)) 
+resume_moyennes_disciplines <- resume_moyennes_disciplines %>% select(-Annee)
+resume_moyennes_disciplines
+```
+
+```{r}
+library(ggplot2)
+resume_moyennes <- donnees_domaine %>%
+  group_by(Nom_Domaine) %>%
+  summarise(Moyenne_Taux_Insertion = mean(Part_emplois_cadre, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_Insertion)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_moyennes, aes(x = reorder(Nom_Domaine, Moyenne_Taux_Insertion), 
+                            y = Moyenne_Taux_Insertion, fill = Nom_Domaine)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black") +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_Insertion, 1)), hjust = -0.2, size = 5) +
+  labs(title = " ",
+       x = NULL,
+       y = NULL) +
+  theme_minimal() + ylim(0,110) + theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_blank(), legend.position = "none")
+
+```
+
+```{r}
+resume_insertion_discipline <- donnees_domaine %>%
+  group_by(Nom_Discipline) %>%
+  summarise(Moyenne_Taux_insertion = mean(Tx_insertion, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_insertion)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_insertion_discipline, aes(x = reorder(Nom_Discipline, Moyenne_Taux_insertion), 
+                            y = Moyenne_Taux_insertion, fill = Moyenne_Taux_insertion)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_insertion, 1)), hjust = -0.2, size = 5) +
+  labs(title = "Moyenne du Taux d'insertion par discipline",
+       x = "Discipline",
+       y = "Moyenne du Taux d'insertion (%)") +
+  theme_minimal() + ylim(0,110)  # Dégradé de couleur
+```
+
+```{r}
+heatmap_data <- donnees_domaine %>%
+  group_by(Nom_Domaine, Nom_Discipline) %>%
+  summarise(Moyenne_Taux_Insertion = mean(Tx_insertion, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(heatmap_data, aes(x = Nom_Domaine, y = Nom_Discipline, color = Moyenne_Taux_Insertion)) +
+  geom_point() +
+  scale_color_gradient(low = "blue", high = "red") +
+  labs(title = "Taux d'Insertion par Domaine et Discipline",
+       x = "Domaine",
+       y = "Discipline",
+       size = "Taux d'Insertion (%)",
+       color = "Taux d'Insertion (%)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+###BOURSIERS
+
+```{r}
+resume_boursiers <- donnees_domaine %>%
+  group_by(Nom_Domaine) %>%
+  summarise(Moyenne_Taux_boursiers = mean(Part_diplomes_boursiers, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_boursiers)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_boursiers, aes(x = reorder(Nom_Domaine, Moyenne_Taux_boursiers), 
+                            y = Moyenne_Taux_boursiers, fill = Nom_Domaine)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_boursiers, 1)), hjust = -0.2, size = 5) +
+  labs(title = " ",
+       x = NULL,
+       y = NULL) +
+  theme_minimal() + ylim(0,40) + theme(legend.position = "none")
+```
+
+```{r}
+resume_boursiers_discipline <- donnees_domaine %>%
+  group_by(Nom_Discipline) %>%
+  summarise(Moyenne_Taux_boursiers = mean(Part_diplomes_boursiers, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_boursiers)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_boursiers_discipline, aes(x = reorder(Nom_Discipline, Moyenne_Taux_boursiers), 
+                            y = Moyenne_Taux_boursiers, fill = Moyenne_Taux_boursiers)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_boursiers, 1)), hjust = -0.2, size = 5) +
+  labs(title = "Moyenne du Taux de boursiers par Domaine",
+       x = "Discipline",
+       y = "Moyenne du Taux d'étudiants boursiers (%)") +
+  theme_minimal() +
+  scale_fill_gradient(low = "blue", high = "red", guide = "none") + ylim(0,110)  # Dégradé de couleur
+```
+
+## Evolution par année:
+
+```{r}
+df_clean <- donnees_domaine %>%
+  filter(Situation == "30 mois après le diplôme") %>%
+  group_by(Annee, Nom_Domaine) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_insertion_moyen = mean(Tx_insertion, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_clean$Annee <- as.factor(df_clean$Annee)
+```
+
+```{r}
+
+ggplot(df_clean, aes(x = Annee, y = Tx_insertion_moyen, group = Nom_Domaine, color = Nom_Domaine)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "  ",
+       x = NULL,
+       y = NULL,
+       color = "Domaine") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+```{r}
+df_clean2 <- donnees_domaine %>%
+  filter(Situation == "30 mois après le diplôme") %>%
+  group_by(Annee, Nom_Discipline) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_insertion_moyen = mean(Tx_insertion, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_clean2$Annee <- as.factor(df_clean2$Annee)
+```
+
+```{r}
+library(plotly)
+p_insertion <- ggplot(df_clean2, aes(x = Annee, y = Tx_insertion_moyen, group = Nom_Discipline, color = Nom_Discipline)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "Évolution du taux d'insertion selon la discipline étudiée",
+       x = "Année",
+       y = "Taux d'insertion moyen (%)",
+       color = "Discipline") +
+  theme(legend.position = "none")+
+  theme_minimal()  # Rotation des années si besoin
+
+# Convertir le graphique ggplot en plotly interactif
+p_insertion_plotly <- ggplotly(p_insertion)
+
+p_insertion_plotly <-  p_insertion_plotly %>% layout(showlegend = FALSE)
+# Afficher le graphique
+p_insertion_plotly
+```
+
+### evolution moyenne de la part des boursier :
+
+```{r}
+df_clean_boursiers <- donnees_domaine %>%
+  group_by(Annee, Nom_Domaine) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_boursiers_moyen = mean(Part_diplomes_boursiers, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_clean_boursiers$Annee <- as.factor(df_clean_boursiers$Annee)
+```
+
+```{r}
+ggplot(df_clean_boursiers, aes(x = Annee, y = Tx_boursiers_moyen, group = Nom_Domaine, color = Nom_Domaine)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "  ",
+       x = NULL,
+       y = NULL,
+       color = "Domaine") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+Note : les courbes sont confondues pour les autres masters
+
+```{r}
+df_clean_boursiers2 <- donnees_domaine %>%
+  group_by(Annee, Nom_Discipline) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_boursiers_moyen = mean(Part_diplomes_boursiers, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_clean_boursiers2$Annee <- as.factor(df_clean_boursiers2$Annee)
+```
+
+```{r}
+ggplot(df_clean_boursiers2, aes(x = Annee, y = Tx_boursiers_moyen, group = Nom_Discipline, color = Nom_Discipline)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "Évolution part des boursiers par domaine (moyenne)",
+       x = "Année",
+       y = "Taux d'insertion moyen (%)",
+       color = "Domaine") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+### Part des femmes :
+
+```{r}
+resume_femmes <- donnees_domaine %>%
+  group_by(Nom_Domaine) %>%
+  summarise(Moyenne_Taux_femmes = mean(Part_femmes, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_femmes)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_femmes, aes(x = reorder(Nom_Domaine, Moyenne_Taux_femmes), 
+                            y = Moyenne_Taux_femmes, fill = Moyenne_Taux_femmes)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black", fill = "gray") +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_femmes, 1)), hjust = -0.2, size = 5) +
+  labs(title = "Moyenne de la part des femmes par Domaine",
+       x = NULL,
+       y = NULL) +
+  theme_minimal()  + ylim(0,110) + theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_blank()) # Dégradé de couleur
+```
+
+### Moyenne part des femmes par discipline :
+
+```{r}
+resume_femmes_discipline <- donnees_domaine %>%
+  group_by(Nom_Discipline) %>%
+  summarise(Moyenne_Taux_femmes = mean(Part_femmes, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_femmes)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_femmes_discipline, aes(x = reorder(Nom_Discipline, Moyenne_Taux_femmes), 
+                            y = Moyenne_Taux_femmes, fill = Moyenne_Taux_femmes)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_femmes, 1)), hjust = -0.2, size = 5) +
+  labs(title = "Moyenne du Taux de boursiers par Domaine",
+       x = "Discipline",
+       y = "Moyenne du Taux d'étudiants boursiers (%)") +
+  theme_minimal() +
+  scale_fill_gradient(low = "blue", high = "red", guide = "none") + ylim(0,110)  # Dégradé de couleur
+```
+
+```{r}
+df_clean_femmes <- donnees_domaine %>%
+  group_by(Annee, Nom_Domaine) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_femmes_moyen = mean(Part_femmes, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_clean_femmes$Annee <- as.factor(df_clean_femmes$Annee)
+```
+Évolution part des femmes selon le domaine d'étude (moyenne)
+```{r}
+ggplot(df_clean_femmes, aes(x = Annee, y = Tx_femmes_moyen, group = Nom_Domaine, color = Nom_Domaine)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = " ",
+       x = NULL,
+       y = NULL,
+       color = "Domaine") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+Note : les courbes sont confondues pour les autres masters
+
+```{r}
+df_clean_femmes2 <- donnees_domaine %>%
+  group_by(Annee, Nom_Discipline) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_femmes_moyen = mean(Part_femmes, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_clean_femmes2$Annee <- as.factor(df_clean_femmes2$Annee)
+```
+
+```{r}
+library(plotly)
+p <- ggplot(df_clean_femmes2, aes(x = Annee, y = Tx_femmes_moyen, group = Nom_Discipline, color = Nom_Discipline)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "Évolution de la part des femmes selon la discipline étudiée",
+       x = "Année",
+       y = "Taux de femmes moyen (%)",
+       color = "Discipline") +
+  theme(legend.position = "none")+
+  theme_minimal()  # Rotation des années si besoin
+
+# Convertir le graphique ggplot en plotly interactif
+p_plotly <- ggplotly(p)
+
+p_plotly <-  p_plotly %>% layout(showlegend = FALSE)
+# Afficher le graphique
+p_plotly
+```
+
+### Part emplois cadres :
+
+### evolution moyenne de la part des emplois cadres :
+
+```{r}
+df_clean_cadre <- donnees_domaine %>%
+  group_by(Annee, Nom_Domaine) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_cadre_moyen = mean(Part_emploi_cadre_ou_PI, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_clean_cadre$Annee <- as.factor(df_clean_cadre$Annee)
+```
+Évolution part des emplois cadres post diplome par \ndomaine (en %)
+```{r}
+ggplot(df_clean_cadre, aes(x = Annee, y = Tx_cadre_moyen, group = Nom_Domaine, color = Nom_Domaine)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "  ",
+       x = NULL,
+       y = NULL,
+       color = "Domaine") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+Note : les courbes sont confondues pour les autres masters 2015 : réforme professeur des écoles
+
+```{r}
+df_clean_cadre2 <- donnees_domaine %>%
+  group_by(Annee, Nom_Discipline) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_cadre_moyen = mean(Part_emploi_cadre_ou_PI, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_clean_cadre2$Annee <- as.factor(df_clean_cadre2$Annee)
+```
+
+```{r}
+library(plotly)
+p1 <- ggplot(df_clean_cadre2, aes(x = Annee, y = Tx_cadre_moyen, group = Nom_Discipline, color = Nom_Discipline)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "Évolution de la part des emplois cadres selon la discipline étudiée",
+       x = "Année",
+       y = "Part emploi cadre (%)",
+       color = "Discipline") +
+  theme(legend.position = "none")+
+  theme_minimal()  # Rotation des années si besoin
+
+# Convertir le graphique ggplot en plotly interactif
+p1_plotly <- ggplotly(p1)
+
+p1_plotly <-  p1_plotly %>% layout(showlegend = FALSE)
+# Afficher le graphique
+p1_plotly
+```
+
+```{r}
+ggplot(donnees_domaine, aes(x = Nom_Domaine, y = Salaire_net_mens_1_quartile)) +
+  geom_boxplot(fill = "lightblue", color = "darkblue", outlier.colour = "red", outlier.shape = 16) +
+  coord_flip() +  # Pour mieux visualiser si les noms des domaines sont longs
+  labs(title = "Distribution des Salaires Nets Mensuels par Domaine",
+       x = "Domaine",
+       y = "Salaire Net Mensuel (1er Quartile)") +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot(donnees_domaine, aes(x = Nom_Domaine, y = Salaire_net_mens_3_quartile)) +
+  geom_boxplot(fill = "lightblue", color = "darkblue", outlier.colour = "red", outlier.shape = 16) +
+  coord_flip() +  # Pour mieux visualiser si les noms des domaines sont longs
+  labs(title = "Distribution des Salaires Nets Mensuels par Domaine",
+       x = "Domaine",
+       y = "Salaire Net Mensuel (3eme Quartile)") +
+  theme_minimal()
+
+```
+
+## Exportations :
+
+```{r}
+write.csv(donnees_domaine, file = "générale.csv", row.names = FALSE)
+
+```

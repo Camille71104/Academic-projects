@@ -1,0 +1,131 @@
+---
+title: "KPPV"
+author: "Camille Laignel"
+format: html
+editor: visual
+---
+
+## Importation de la bdd + packages :
+
+```{r}
+donnees_kppv <- read.csv("./donnees_kppv.csv")
+library(dplyr)
+library(VIM)
+library(missForest)
+```
+
+## Imput des valeurs manquantes de code acad et nom acad :
+
+```{r}
+#donnees_kppv[is.na(donnees_kppv$Code_Acad),]
+```
+
+Ici, on retrouve un résultat intéressant et utile, c'ets le regroupement par catégorie de tous les masters de la même discipline pour une année. On peut le détacher du data frame plus détaillé et en créer un autre qui sera sûrement utile pour des résultats plus généraux :
+
+```{r}
+donnees_generales <- donnees_kppv[is.na(donnees_kppv$Code_Acad),]
+```
+
+Evidemment ces regroupement n'ont pas de code d'acad et de nom d'acd précis :
+
+```{r}
+donnees_generales <- donnees_generales %>% select(-c(Code_Acad,Nom_Acad))
+```
+
+```{r}
+donnees_generales$Tx_chomage_regional[donnees_generales$Tx_chomage_regional == "fe"] <- NA
+```
+
+## Test visu des données manquantes sur la bdd généraliste :
+
+```{r}
+library(visdat)
+vis_miss(donnees_generales)
+```
+
+### Conservation des données spécifiques par université :
+
+```{r}
+donnees_specifiques <- donnees_kppv %>% filter(!is.na(Code_Acad))
+```
+
+### Visu des données manquantes sur la bdd spécifique :
+
+```{r}
+vis_miss(donnees_specifiques)
+```
+
+## Test des kppv sur données générales :
+
+```{r}
+donnees_generales_impute <- kNN(donnees_generales, variable = c("Part_diplomes_boursiers","Part_emplois_cadre","Part_femmes","Tx_chomage_regional","Salaire_net_mens_1_quartile","Salaire_net_mens_3_quartile"), k = 5)  # 5 voisins (peut être ajusté)
+```
+
+Suppression des dernières colonnes :
+
+```{r}
+donnees_generales_impute <- donnees_generales_impute %>% select(-ends_with("_imp"))
+```
+
+## Test nb kppv sur petit échantillon :
+
+On va tester le nb de voisin qui se rapproche au mieux des vrais valeurs
+
+```{r}
+donnees_rennes1 <- donnees_specifiques[donnees_specifiques$Nom_Etabl == "Rennes 1",]
+```
+
+On visualise les données manquantes pour ce df :
+
+```{r}
+library(visdat)
+#vis_miss(donnees_rennes1)
+```
+
+On va supprimer 2 lignes (3 et 271) (le master LMD Droit de Rennes 1 en 2018 a toutes ses données, on va les remplacer et comparer les données imputes aux données réelles)
+
+```{r}
+comp <- donnees_rennes1[c(3,271),]
+```
+
+On remplace toutes les valeurs de ces 2 lignes par des na :
+
+```{r}
+donnees_rennes1[3,12:22] <- NA
+donnees_rennes1[271,12:22] <- NA
+```
+
+On applique les kppv à l'échantillon : d'abord avec 5 (valeurs trop éloignées de la réalité \[ex : taux de rep imp à 70 contre 90 en réalité\]) 6 : la machine affiche un message d'erreur car elle toruve des doubles et le tableau est en entier (donc on perd en précision) mais valeurs trop hautes, 3 : les valeurs se rapprochent plutôt pas mal, 7 : manque de précision annoncée comme pour le 6, précision aps si mal pour les variables ayant peu de données manquantes.
+
+```{r}
+donnees_rennes1_kppv <-  kNN(donnees_rennes1, k = 3)
+donnees_rennes1_kppv <- donnees_rennes1_kppv %>% select(-ends_with("_imp"))
+```
+
+On affiche les 2 pour les comparer :
+
+```{r}
+donnees_rennes1_kppv[c(3,271),]
+```
+
+```{r}
+comp
+```
+
+## Kppv données spécifiques :
+
+```{r}
+donnees_spe_kppv <-  kNN(donnees_specifiques, k = 3)
+donnees_spe_kppv <- donnees_spe_kppv %>% select(-ends_with("_imp"))
+```
+
+```{r}
+vis_miss(donnees_spe_kppv)
+```
+
+## Exportation des BDD
+
+```{r}
+write.csv(donnees_generales_impute, file = "donnees_generales.csv")
+write.csv(donnees_spe_kppv, file = "donnees_par_univ.csv ")
+```

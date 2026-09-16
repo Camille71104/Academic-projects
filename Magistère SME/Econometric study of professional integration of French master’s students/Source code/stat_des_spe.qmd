@@ -1,0 +1,392 @@
+---
+title: "Stat des spe"
+format: html
+editor: visual
+---
+
+## Importations :
+
+```{r}
+donnees_univ <- read.csv("donnees_par_univ.csv", stringsAsFactors = TRUE, row.names = "X")
+```
+
+## Traitement de la bdd :
+
+Aucune données du taux de chomage pour les antilles, la polynésie (= réduction à la france métropolitaine)
+
+```{r}
+library(dplyr)
+library(stringr)
+donnees_univ2 <- donnees_univ %>%
+  filter(!str_detect(Nom_Etabl, "Antilles|Polynésie Française|La Réunion|Guyane"))
+#levels(donnees_univ2$Salaire_net_mens_med_regional)
+#summary(donnees_univ)
+levels(donnees_univ2$Salaire_net_mens_med_regional)[c(2,10)] <- "1710"
+```
+
+```{r}
+donnees_univ <- donnees_univ2
+donnees_univ$Salaire_net_mens_1_quartile <- as.numeric(as.character(donnees_univ$Salaire_net_mens_1_quartile))
+donnees_univ$Salaire_net_mens_3_quartile <- as.numeric(as.character(donnees_univ$Salaire_net_mens_3_quartile))
+donnees_univ$Salaire_net_mens_med_regional <- as.numeric(as.character(donnees_univ$Salaire_net_mens_med_regional))
+#summary(donnees_univ)
+donnees_univ$Annee <- as.factor(donnees_univ$Annee)
+summary(donnees_univ)
+```
+```{r}
+library(dplyr)
+library(tibble)
+library(tidyr)
+library(flextable)
+
+# Calcul du tableau récapitulatif avec les nouveaux noms de variables
+recap <- tibble(
+  Variable = c("Taux d'insertion", "% de boursiers", "Salaire médian",
+               "% emplois cadre", "% de femmes"),
+  
+  Moyenne = c(
+    mean(donnees_univ$Tx_insertion, na.rm = TRUE),
+    mean(donnees_univ$Part_diplomes_boursiers, na.rm = TRUE),
+    mean(donnees_univ$Salaire_net_mens_med_regional, na.rm = TRUE),
+    mean(donnees_univ$Part_emplois_cadre, na.rm = TRUE),
+    mean(donnees_univ$Part_femmes, na.rm = TRUE)
+  ),
+  
+  Ecart_type = c(
+    sd(donnees_univ$Tx_insertion, na.rm = TRUE),
+    sd(donnees_univ$Part_diplomes_boursiers, na.rm = TRUE),
+    sd(donnees_univ$Salaire_net_mens_med_regional, na.rm = TRUE),
+    sd(donnees_univ$Part_emplois_cadre, na.rm = TRUE),
+    sd(donnees_univ$Part_femmes, na.rm = TRUE)
+  ),
+  
+  Mediane = c(
+    median(donnees_univ$Tx_insertion, na.rm = TRUE),
+    median(donnees_univ$Part_diplomes_boursiers, na.rm = TRUE),
+    median(donnees_univ$Salaire_net_mens_med_regional, na.rm = TRUE),
+    median(donnees_univ$Part_emplois_cadre, na.rm = TRUE),
+    median(donnees_univ$Part_femmes, na.rm = TRUE)
+  ),
+  
+  Min = c(
+    min(donnees_univ$Tx_insertion, na.rm = TRUE),
+    min(donnees_univ$Part_diplomes_boursiers, na.rm = TRUE),
+    min(donnees_univ$Salaire_net_mens_med_regional, na.rm = TRUE),
+    min(donnees_univ$Part_emplois_cadre, na.rm = TRUE),
+    min(donnees_univ$Part_femmes, na.rm = TRUE)
+  ),
+  
+  Max = c(
+    max(donnees_univ$Tx_insertion, na.rm = TRUE),
+    max(donnees_univ$Part_diplomes_boursiers, na.rm = TRUE),
+    max(donnees_univ$Salaire_net_mens_med_regional, na.rm = TRUE),
+    max(donnees_univ$Part_emplois_cadre, na.rm = TRUE),
+    max(donnees_univ$Part_femmes, na.rm = TRUE)
+  )
+) %>%
+  # Arrondir à 2 chiffres toutes les colonnes sauf "Variable"
+  mutate(across(-Variable, ~ round(.x, 2))) %>%
+  # Passage en format long puis large pour avoir les stats en ligne
+  pivot_longer(-Variable, names_to = "Statistique", values_to = "Valeur") %>%
+  pivot_wider(names_from = Variable, values_from = Valeur)
+
+# Affichage avec flextable
+flextable(recap) 
+```
+
+```{r}
+print("Nombre d'etablissements")
+length(levels(donnees_univ$Nom_Etabl))
+print("Nombre d'académies")
+length(levels(donnees_univ$Nom_Acad))
+print("Nombre de domaines")
+length(levels(donnees_univ$Nom_Domaine))
+print("Nombre de disciplines")
+length(levels(donnees_univ$Nom_Discipline))
+```
+
+ICI on fait les stat des des données par académies \## EVolution taux d'insertion par académie:
+
+```{r}
+df_insertion <- donnees_univ %>%
+  group_by(Annee, Nom_Acad) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_insertion_moyen = mean(Tx_insertion, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+# Transformer l'année en facteur pour ggplot
+df_insertion$Annee <- as.factor(df_insertion$Annee)
+```
+
+```{r}
+library(ggplot2)
+ggplot(df_insertion, aes(x = Annee, y = Tx_insertion_moyen, group = Nom_Acad, color = Nom_Acad)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "Évolution du taux d'insertion moyen par académie",
+       x = "Année",
+       y = "Taux d'insertion moyen (%)",
+       color = "Académie") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+## EVolution taux d'insertion par région :
+
+```{r}
+get_region <- function(academie) {
+  case_when(
+    academie %in% c("Amiens", "Lille") ~ "Nord",
+    academie %in% c("Besançon", "Dijon", "Nancy-Metz", "Reims", "Strasbourg") ~ "Nord-Est",
+    academie %in% c("Normandie", "Orléans-Tours", "Rennes", "Nantes") ~ "Nord-Ouest",
+    academie %in% c("Aix-Marseille", "Nice", "Montpellier", "Grenoble", "Lyon", "Clermont-Ferrand") ~ "Sud-Est",
+    academie %in% c("Bordeaux", "Limoges", "Poitiers", "Toulouse") ~ "Sud-Ouest",
+    academie %in% c("Paris", "Versailles", "Créteil") ~ "Île-de-France",
+    academie == "Corse" ~ "Corse",
+    TRUE ~ "Autre" # Pour gérer d'éventuels cas non prévus
+  )
+}
+
+# Appliquer la fonction sur la liste des académies
+donnees_univ$regions <- sapply(donnees_univ$Nom_Acad, get_region)
+
+```
+
+### Moyennes des variables par régions :
+
+```{r}
+resume_moyennes <- donnees_univ %>%
+  group_by(regions) %>%  # Regroupe les données par domaine
+  summarise(across(where(is.numeric), mean, na.rm = TRUE))
+resume_moyennes <- resume_moyennes %>% select(-c("Tx_rep","Part_emploi_cadre_ou_PI","Part_emplois_stables","Salaire_net_mens_1_quartile","Salaire_net_mens_3_quartile"))
+resume_moyennes <- resume_moyennes %>%
+  mutate(across(where(is.numeric), round, digits = 2))
+```
+
+```{r}
+library(flextable)
+
+# Renommage des colonnes avant la création du flextable
+resume_moyennes <- resume_moyennes %>%
+  setNames(c("Région", "Taux d'insertion", "% de boursiers", "Salaire median", "% emplois cadre", "% de femmes"))
+
+# Création du flextable
+flextable(resume_moyennes)
+```
+
+```{r}
+table(donnees_univ[which(donnees_univ$Nom_Acad == "Corse"),]$Nom_Discipline)
+```
+Moyenne du Taux d'Insertion par Région (en %)
+```{r}
+resume_insertion <- donnees_univ %>%
+  group_by(regions) %>%
+  summarise(Moyenne_Taux_Insertion = mean(Tx_insertion, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_Insertion)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_insertion, aes(x = reorder(regions, Moyenne_Taux_Insertion), 
+                            y = Moyenne_Taux_Insertion, fill = regions)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black") +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_Insertion, 1)), hjust = -0.2, size = 5) +
+  labs(title = " ",
+       x = "  ",
+       y = "  ") +
+  theme_minimal() + ylim(0,95) +  # Dégradé de couleur
+  theme(axis.text.x = element_blank(), plot.title = element_text(hjust = 0.3), legend.position = "none")
+```
+
+```{r}
+df_insertion2 <- donnees_univ %>%
+  group_by(Annee, regions) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_insertion_moyen = mean(Tx_insertion, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+```
+Évolution du taux d'insertion moyen par Région (en %)
+```{r}
+ggplot(df_insertion2, aes(x = Annee, y = Tx_insertion_moyen, group = regions, color = regions)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "",
+       x = "  ",
+       y = "   ",
+       color = "Régions :") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+##BOURSIERS
+Moyenne du Taux de boursiers par Région (en %)
+```{r}
+resume_boursiers <- donnees_univ %>%
+  group_by(regions) %>%
+  summarise(Moyenne_Taux_boursiers = mean(Part_diplomes_boursiers, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_boursiers)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_boursiers, aes(x = reorder(regions, Moyenne_Taux_boursiers), 
+                            y = Moyenne_Taux_boursiers, fill = regions)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black") +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_boursiers, 1)), hjust = -0.2, size = 5) +
+  labs(title = " ",
+       x = "   ",
+       y = "  ") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), plot.title = element_text(hjust = 0.3), legend.position = "none")+ ylim(0,40)  # Dégradé de couleur
+```
+
+### Evolution du taux de boursier moyen sur la période :
+
+```{r}
+df_clean_boursiers <- donnees_univ %>%
+  group_by(Annee, regions) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_boursiers_moyen = mean(Part_diplomes_boursiers, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+
+```
+Évolution part moyenne des boursiers par Région (en %)
+```{r}
+ggplot(df_clean_boursiers, aes(x = Annee, y = Tx_boursiers_moyen, group = regions, color = regions)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "  ",
+       x = NULL,
+       y = NULL,
+       color = "Région :") +
+  theme_minimal() +
+  theme(legend.position = "right", plot.title = element_text(hjust =0.5 ),
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+### Part des femmes :
+Moyenne de la part des femmes par Région (en  %)
+```{r}
+resume_femmes <- donnees_univ %>%
+  group_by(regions) %>%
+  summarise(Moyenne_Taux_femmes = mean(Part_femmes, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_femmes)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_femmes, aes(x = reorder(regions, Moyenne_Taux_femmes), 
+                            y = Moyenne_Taux_femmes, fill = regions)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black") +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_femmes, 1)), hjust = -0.2, size = 5) +
+  labs(title = "  ",
+       x = NULL,
+       y = NULL) +
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), plot.title = element_text(hjust = 0.3), legend.position = "none") + ylim(0,65)  # Dégradé de couleur
+```
+
+```{r}
+df_clean_femmes <- donnees_univ %>%
+  group_by(Annee, regions) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_femmes_moyen = mean(Part_femmes, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+```
+Évolution part moyenne des femmes selon la Région (en %)
+```{r}
+ggplot(df_clean_femmes, aes(x = Annee, y = Tx_femmes_moyen, group = regions, color = regions)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = " ",
+       x = NULL,
+       y = NULL,
+       color = "Région :") +
+  theme_minimal() +
+  theme(legend.position = "right",plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+### Part emplois cadres :
+
+```{r}
+resume_cadre <- donnees_univ %>%
+  group_by(regions) %>%
+  summarise(Moyenne_Taux_cadre = mean(Part_emplois_cadre, na.rm = TRUE)) %>%
+  arrange(Moyenne_Taux_cadre)  # Classement du plus petit au plus grand
+
+# Création du graphique
+ggplot(resume_cadre, aes(x = reorder(regions, Moyenne_Taux_cadre), 
+                            y = Moyenne_Taux_cadre, fill = Moyenne_Taux_cadre)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black", fill = "gray") +
+  coord_flip() +  # Rend les barres horizontales
+  geom_text(aes(label = round(Moyenne_Taux_cadre, 1)), hjust = -0.2, size = 5) +
+  labs(title = "Moyenne de la part des emplois cadre post-diplôme par Région (en %)",
+       x = NULL,
+       y = NULL) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), plot.title = element_text(hjust = 0.3)) + ylim(0,80)  # Dégradé de couleur
+```
+
+### evolution moyenne de la part des emplois cadres :
+
+```{r}
+df_clean_cadre <- donnees_univ %>%
+  group_by(Annee, regions) %>%  # Regroupement par Année et Domaine
+  summarise(Tx_cadre_moyen = mean(Part_emploi_cadre_ou_PI, na.rm = TRUE)) %>%  # Moyenne par domaine
+  ungroup()
+```
+Évolution de la part moyenne des emplois cadres post diplome par Région (en %)
+```{r}
+ggplot(df_clean_cadre, aes(x = Annee, y = Tx_cadre_moyen, group = regions, color = regions)) +
+  geom_line(size = 1.2) +   # Courbes plus visibles
+  geom_point(size = 3) +    # Points sur les courbes
+  labs(title = "  ",
+       x = NULL,
+       y = NULL,
+       color = "Région :") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotation des années si besoin
+```
+
+## SALAIRES :
+
+### Premier quartile :
+
+```{r}
+ggplot(donnees_univ, aes(x = regions, y = Salaire_net_mens_1_quartile)) +
+  geom_boxplot(fill = "gray", color = "black", outlier.colour = "black", outlier.shape = 16) +
+  coord_flip() +  # Pour mieux visualiser si les noms des domaines sont longs
+  labs(title = "Distribution des Salaires Nets Mensuels par Domaine (1er quartile)",
+       x = NULL,
+       y = NULL) +
+  theme_minimal()
+
+```
+
+### Salaire median
+
+```{r}
+ggplot(donnees_univ, aes(x = regions, y = Salaire_net_mens_med_regional)) +
+  geom_boxplot(fill = "gray", color = "black", outlier.colour = "black", outlier.shape = 16) +
+  coord_flip() +  # Pour mieux visualiser si les noms des domaines sont longs
+  labs(title = "Distribution des Salaires Nets Mensuels par Domaine (Médiane)",
+       x = NULL,
+       y = NULL) +
+  theme_minimal()
+```
+
+### 3 eme quartile :
+
+```{r}
+ggplot(donnees_univ, aes(x = regions, y = Salaire_net_mens_3_quartile)) +
+  geom_boxplot(fill = "gray", color = "black", outlier.colour = "black", outlier.shape = 16) +
+  coord_flip() +  # Pour mieux visualiser si les noms des domaines sont longs
+  labs(title = "Distribution des Salaires Nets Mensuels par Domaine (3ème quartile)",
+       x = NULL,
+       y = NULL) +
+  theme_minimal()
+```
+
+## Exportations :
+
+```{r}
+write.csv(donnees_univ2, file = "univ2.csv", row.names = FALSE)
+```

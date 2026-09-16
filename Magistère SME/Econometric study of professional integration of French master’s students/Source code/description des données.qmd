@@ -1,0 +1,15 @@
+---
+title: "Description des données "
+format: html
+editor: visual
+---
+
+## Importation des données :
+
+```{r}
+donnees <- read
+```
+
+
+## Definition des données :
+

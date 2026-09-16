@@ -1,0 +1,208 @@
+---
+title: "Traitement Données manquantes"
+format: html
+editor: visual
+---
+
+##Importation de la BDD :
+
+```{r}
+donnees <- read.csv("fr-esr-insertion_professionnelle-master.csv", sep = ";", dec= ",")
+```
+
+## Changement des noms de colonnes pour faciliter les appels :
+
+```{r}
+liste_nom <- c("Annee","Diplome","Num_Etabl","Nom_Etabl","Etabl_actuel","Code_Acad","Nom_Acad","Code_Domaine","Nom_Domaine","Code_Discipline","Nom_Discipline","Situation","Remarque","Nb_rep","Tx_rep","Poids_discipline","Tx_insertion","Tx_emploi","Tx_emploi_salarie_en_fr","Part_emploi_cadre_ou_PI","Part_emplois_stables","Part_emplois_tmps_plein","Salaire_net_med_tmps_plein","Salaire_brut_annuel_estim","Part_diplomes_boursiers","Tx_chomage_regional","Salaire_net_mens_med_regional","Part_emplois_cadre","Part_emplois_ext_region_univ","Part_femmes","Salaire_net_mens_1_quartile","Salaire_net_mens_3_quartile","Cle_etabl","Cle_discipline","Id_Paysage")
+# On vérifie si la liste est de la même longueur que le nb de colonnes
+length(liste_nom)
+ncol(donnees)
+```
+
+```{r}
+colnames(donnees) <- liste_nom
+```
+
+Dans un premier temps, avant toute suppression de lignes ou colonnes, il m'a fallu analyser qu'elles données manquaient. Sur la page de l'open data du ministère de l'enseignement 2 informations sur les données manquantes apparaissaient : il y avait les nd ()
+
+```{r}
+donnees$Annee <- factor(donnees$Annee)
+```
+
+## Suppression des colonnes peu importantes :
+
+Tests sur les na :
+
+```{r}
+sum(is.na(donnees))
+```
+
+Tous dans une même colonne ?
+
+```{r}
+vect_na <- c()
+for(i in 1:ncol(donnees)){
+  vect_na <- c(vect_na,sum(is.na(donnees[,i]))/length(donnees[,i]))
+}
+vect_na
+
+# >On voit que tous les Na sont dans la meme colonne : 
+colnames(donnees)[which(vect_na!=0)]
+```
+
+Suppression colonne "Nb_rep"
+
+```{r}
+library(dplyr)
+donnees <- donnees %>% select(-Nb_rep) 
+```
+
+## Suppression des lignes :
+
+Certaines universités n'ont pas répondu à l'enquête (c'est le cas de Paris-Dauphine en 2010 et 2012), on doit donc supprimer ces observations (observations remarque :) :
+
+```{r}
+table(donnees$Remarque)
+```
+
+On supprime ces lignes :
+
+```{r}
+donnees <- donnees %>% filter(donnees$Remarque != "Université n'ayant pas participé à l'enquête")
+```
+
+## Supression des colonnes répétitives :
+
+Il y a plusieurs colonnes inutiles ou que l'on a plus besoin (etabl_actuel, cle_discipline, cle_etabl, Id_paysage)
+
+```{r}
+donnees <- donnees %>% select(-c(Remarque,Etabl_actuel,Cle_discipline,Cle_etabl, Id_Paysage, Poids_discipline))
+```
+
+De plus, en observant de plus près les données et la fiche descriptive associée on voit que pour la session 2020 seulement (donc les dernières données), 2 nouveaux indicateurs ont été ajoutés : taux d'emploi et le tx d'emploi salarié en fr donc on aura beaucoup de données manquantes entrainées par l'abasence de ces indicateur les années précédentes (on doit donc les supprimer)
+
+```{r}
+donnees <- donnees %>% select(-c(Tx_emploi,Tx_emploi_salarie_en_fr))
+```
+
+## Identification des valeurs manquantes :
+
+Il y a plusieurs valeurs manquantes : ns (non significatif\[moins de 30 personnes ayant répondus\]), nd (non-disponible \[pas de répondants\]) On observe ces données par colonnes pour identifier les colonnes où il y a un taux élevé de non -rep :\
+\### Traitement des ns :
+
+```{r}
+vect_ns <- c()
+for(i in 1:ncol(donnees)){
+  vect_ns <- c(vect_ns, round((sum(donnees[,i]=="ns",na.rm = TRUE))/length(donnees[,i]),3))
+}
+vect_ns
+
+# % De valeurs non significatives sur la donnée d'intérêt :
+vect_ns[which(liste_nom == "Part_diplomes_boursiers")]
+```
+
+On identifie les colonnes ayant un taux de ns supérieur à 40% :
+
+```{r}
+colnames(donnees)[vect_ns>0.4]
+```
+
+### Traitement des nd :
+
+```{r}
+vect_nd <- c()
+for(i in 1:ncol(donnees)){
+  vect_nd <- c(vect_nd, round((sum(donnees[,i]=="nd",na.rm = TRUE))/length(donnees[,i]),3))
+}
+vect_nd
+
+# % De valeurs non significatives sur la donnée d'intérêt :
+vect_nd[which(liste_nom == "Part_diplomes_boursiers")]
+```
+
+On identifie les colonnes ayant un taux de nd supérieur à 40% :
+
+```{r}
+colnames(donnees)[vect_nd>0.4]
+```
+
+### Conclusion et suppression :
+
+Il n'y a pas de colonnes avec un taux de nd significatif, en revanche on a pu voir que certaines on un taux élevé de ns : "Tx_insertion", "Part_emploi_cadre_ou_PI", "Part_emplois_stables" "Part_emplois_tmps_plein", "Salaire_net_med_tmps_plein", "Salaire_brut_annuel_estim" "Part_emplois_cadre", "Part_emplois_ext_region_univ" Si par la suite ce n'est pas trop complexe on souhaiterais conserver "Taux \_insertion", "Part_emploi_cadre", "part_emploi_cadre_ou_PI", part_emploi stable ?
+
+```{r}
+liste_suppr <- c("Part_emplois_tmps_plein", "Salaire_net_med_tmps_plein", "Salaire_brut_annuel_estim", "Part_emplois_ext_region_univ")
+```
+
+```{r}
+donnees <- donnees %>% select(-all_of(liste_suppr))
+```
+
+## Il faut ensuite convertir toutes les données vide, ns et nd restantes en na :
+
+```{r}
+donnees <- donnees %>%
+  mutate(across(where(is.character), ~ na_if(., "")))
+
+donnees <- donnees %>%
+  mutate(across(where(is.character), ~ na_if(., "ns")))
+
+donnees <- donnees %>%
+  mutate(across(where(is.character), ~ na_if(., "nd")))
+```
+
+## On essaye de voir s'il y a un lien entre toutes les valeurs manquantes et les années :
+
+```{r}
+donnees_na <- donnees %>%
+  group_by(Annee) %>%
+  summarise(across(everything(), ~sum(is.na(.)), .names = "NA_count_{.col}"))
+donnees_na
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(flextable)
+
+# Calcul du nombre de valeurs manquantes par variable et par année
+donnees_na <- donnees %>%
+  group_by(Annee) %>%
+  summarise(across(everything(), ~sum(is.na(.)), .names = "{.col}")) %>%
+  ungroup()
+
+# Transposer : on passe les noms de variables en lignes, années en colonnes
+donnees_na_long <- donnees_na %>%
+  pivot_longer(-Annee, names_to = "Variable", values_to = "Nombre_NA") %>%
+  pivot_wider(names_from = Annee, values_from = Nombre_NA)
+
+# Supprimer les lignes où il n'y a que des 0 (aucune NA sur toutes les années)
+donnees_na_filtered <- donnees_na_long %>%
+  filter(if_any(-Variable, ~ . != 0))
+
+# Mise en forme en flextable
+donnees_na_flex <- flextable(donnees_na_filtered) %>%
+  theme_booktabs() %>%
+  autofit() %>%
+  add_header_lines("Nombre de valeurs manquantes par variable et par année") %>%
+  align(align = "center", part = "all")
+
+donnees_na_flex
+
+```
+
+
+Il y en a pas (il n'y a oas une année ou il y a plus de données manquantes) Pour aller plus vite on peut visualiser les données avec visdat :
+
+```{r}
+library(visdat)
+library(ggplot2)
+vis_miss(donnees)+
+  theme(axis.text.x = element_text(angle = 55))
+
+```
+
+## Exportation de la bdd pour la suite :
+
+```{r}
+write.table(donnees, "./donnees_kppv.csv", sep = ",", dec = ".")
+```

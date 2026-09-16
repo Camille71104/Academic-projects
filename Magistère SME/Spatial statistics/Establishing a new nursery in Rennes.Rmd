@@ -1,0 +1,830 @@
+---
+title: "Étude géomarketing – Équipe Babilou"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    social: menu
+    source_code: embed
+theme: flatly
+logo: logo_babilou.png
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+knitr::opts_knit$set(root.dir = normalizePath("C:/Users/33769/Desktop/MAS/M1/Magistère/S2 - Statistiques Spatiales/Projet/"))
+
+```
+
+
+```{r, include=FALSE}
+setwd("C:/Users/33769/Desktop/MAS/M1/Magistère/S2 - Statistiques Spatiales/Projet/")
+```
+
+
+```{r, include=FALSE}
+pacman::p_load(dplyr,viridis ,spatstat,ggplot2, sf,readr,readxl,tmap, stringr)
+library(opentripplanner)
+```
+
+```{r, include=FALSE}
+iris_shp<-st_read("./Data/georef-france-iris-millesime.shp")
+iris_shp$com_name<-gsub(pattern="\\['|\\']", replacement='',iris_shp$com_name) #remove the [' ']
+iris_shp$iris_code<-gsub(pattern="\\['|\\']", replacement='',iris_shp$iris_code) #remove the [' ']
+iris_shp$iris_name<-gsub(pattern="\\['|\\']", replacement='',iris_shp$iris_name) #remove the [' ']
+creche_shp<-st_read("./Data/insee-sirene.shp")
+rennes_shp<-st_read("./Data/dataseed-sirene-1.shp")
+iris_data <- read_excel("./Data/iris_35.xlsx")
+```
+
+```{r, include=FALSE}
+creche_rennes <- creche_shp
+creche_rennes$commune <- trimws(sapply(strsplit(creche_rennes$ban_adresse, ","), `[`, 2))
+creche_rennes <- creche_rennes %>% filter(commune == "Rennes")
+iris_rennes<-iris_shp%>%filter(com_name=="Rennes")
+
+creche_rennes <- creche_rennes %>%
+  mutate(effectif_label = ifelse(is.na(etablisseme.11), "Inconnu", as.character(etablisseme.11)))
+
+creche_rennes <- creche_rennes %>% 
+  mutate(nom_creche = ifelse(is.na(unite_legal),paste(as.character(unite_legal.1),as.character(unite_legal.2)),unite_legal)) %>% 
+  mutate(nom_creche = ifelse(nom_creche == "COMMUNE DE RENNES", etablisseme.1,nom_creche)) %>% 
+  mutate(nom_creche = ifelse(nom_creche == "DEPARTEMENT D ILLE ET VILAINE",etablisseme.1,nom_creche))
+
+creche_rennes$type_juridique <- factor(creche_rennes$unite_legal.3,labels = c("Parentale","Parentale","Municipale","Départementale","Micro-crèche","CAF","SAS","SARL"))
+```
+
+```{r, include=FALSE}
+iris_data$nb_residence_princ<-iris_data$Res_princ_30_moins_40_m2+iris_data$Res_princ_40_moins_60_m2+iris_data$Res_princ_60_moins_80_m2+iris_data$Res_princ_80_moins_100_m2+iris_data$Res_princ_100_moins_120_m2
+```
+
+```{r, include=FALSE}
+colnames(iris_rennes)[20]<-"CODE_IRIS"
+iris_rennes<-merge(iris_rennes,iris_data[,c("CODE_IRIS","1er_quartile_euro","3e_quartile_euro",'Actifs_15-64_ans2',"Pop_15-64_ans","Delta_Pop_20-64_ans","nb_residence_princ")],by="CODE_IRIS")
+colnames(iris_rennes)[c(31:36)]<-c("premier_quartile_revenu","troisieme_quartile_revenu","Actif_total","Pop_15_64","Delta_pop_20_64ans","Nb_residence_principale")
+iris_rennes <-iris_rennes %>%mutate_at(vars(premier_quartile_revenu, troisieme_quartile_revenu, Actif_total,Pop_15_64,Delta_pop_20_64ans,Nb_residence_principale),  ~ na_if(., 0))
+```
+
+```{r, include = FALSE}
+path_data <- "./OTP" #tell him the OTP directory
+path_otp <- otp_dl_jar()
+Sys.setenv(JAVA_HOME = "C:/Program Files/Java/jre1.8.0_481")
+Sys.setenv(PATH = paste0(Sys.getenv("JAVA_HOME"), "/bin;", Sys.getenv("PATH")))
+otp_check_java() #check version java if FALSE go download here: https://www.java.com/en/download/
+#Vous n'avez besoin de lancer cette ligne qu'une fois pour construire le graph
+#log <- otp_build_graph(otp = path_otp, # Build Graph
+#dir = path_data,memory=15000)
+log1<-otp_setup(otp = path_otp, dir = path_data) # Start OTP
+otpcon <- otp_connect()
+```
+
+```{r, include = FALSE}
+### code importation squares et parcs 
+square_shp <- st_read("./Data/dataseed-sirene-1square.shp")
+# Parcs de Rennes ajoutés manuellement avec coordonnées GPS WGS84
+
+parcs_coords <- data.frame(
+  nom = c("Parc du Thabor (Orangerie)",
+          "Parc des Gayeulles",
+          "Prairies Saint-Martin",
+          "Parc de Bréquigny",
+          "Parc du Landry",
+          "Parc de Maurepas",
+          "Parc Hamelin Oberthür",
+          "Parc de Beauregard",
+          "Jardin Saint-Georges",
+          "Parc des Tanneurs",
+          "Jardin de la Confluence"
+          ),
+  
+  lon = c(-1.6700,
+          -1.6453,
+          -1.6711468,
+          -1.68775,
+          -1.642408,
+          -1.656122,
+          -1.6596,
+          -1.699032,
+          -1.674058,
+          -1.678348,
+          -1.696455),
+  
+  lat = c( 48.1142,
+           48.1343,
+           48.124669,
+           48.082222,
+           48.096596,
+           48.122981,
+           48.1127,
+           48.130892,
+           48.1112,
+           48.120156,
+           48.10832)
+)
+
+parc_rennes <- st_as_sf(parcs_coords, coords = c("lon", "lat"), crs = 4326)
+metro_shp <- st_read("./Data/metro_localisation_stations.shp")
+```
+
+```{r, include=FALSE}
+# même projection
+square_shp <- st_transform(square_shp, st_crs(iris_rennes))
+parc_rennes <- st_transform(parc_rennes, st_crs(iris_rennes))
+
+
+metro_shp <- st_transform(metro_shp, st_crs(iris_rennes))
+
+# on garde que les points à l'intérieur des IRIS de Rennes
+square_rennes <- st_filter(square_shp, iris_rennes) %>% st_transform(st_crs(iris_rennes))
+
+metro_rennes <- st_filter(metro_shp, iris_rennes) %>% st_transform(st_crs(iris_rennes))
+
+parc_rennes <- st_transform(parc_rennes, st_crs(iris_rennes))
+```
+
+Présentation du projet
+=====================================
+
+Column {data-width=700}
+--------------------------
+
+### **Camille & Louise — Équipe géomarketing de Babilou**
+
+La métropole de Rennes connaît depuis plusieurs années une transformation rapide. Entre l’arrivée de nouveaux actifs, l’extension des quartiers résidentiels et le développement des infrastructures de transport, la ville attire une population jeune et dynamique, souvent composée de familles ayant de nouveaux besoins en matière de services de proximité.
+
+Dans ce contexte, nous incarnons l’équipe géomarketing du groupe Babilou. Notre mission : identifier l’emplacement le plus pertinent pour l’implantation d’une future crèche privée capable de répondre aux besoins des familles rennaises d’aujourd’hui, mais surtout à ceux de demain.
+
+L’objectif de cette étude ne se limite pas à trouver un terrain disponible. Il s’agit de comprendre le fonctionnement spatial de la ville : où vivent les jeunes actifs, comment ils se déplacent, quels quartiers sont déjà saturés en structures d’accueil, et quels secteurs sont au contraire amenés à devenir les nouveaux pôles de vie rennais.
+
+---
+
+Notre approche combine :
+
+- l’étude de la concurrence existante,
+- les dynamiques résidentielles,
+- les flux de mobilité,
+- l’accessibilité,
+- et la qualité de vie des futurs parents.
+
+L’objectif n’est pas simplement de trouver un espace disponible, mais d’identifier un secteur cohérent avec les évolutions urbaines de la ville.
+
+---
+
+Ce que nous allons analyser pour cette étude
+
+✔ Répartition des crèches privées et parentales  
+✔ Zones déjà saturées ou sous-équipées  
+✔ Densité de population et futurs quartiers attractifs  
+✔ Accessibilité (métro, axes routiers, transports)  
+✔ Environnement familial : parcs, stationnement, commerces  
+
+---
+
+Pour nous, une implantation réussie ne dépend pas uniquement de la concurrence existante, mais aussi de la capacité à anticiper les futurs besoins des familles rennaises.
+
+Column {data-width=300}
+--------------------------
+
+### Chiffres clés
+
+```{r}
+valueBox(value = 120, caption = "Crèches existantes", icon = "fa-building", color = "lightblue")
+```
+
+### Part privé
+```{r}
+valueBox(value = "44%", caption = "Part du privé", icon = "fa-chart-pie", color = "lightblue")
+```
+
+### crèches du groupe
+```{r}
+creche_grp_evncia <- creche_rennes %>% filter(unite_legal == "EVANCIA")
+
+valueBox(
+  icon = "fa-chart-bar", 
+  value = nrow(creche_grp_evncia), 
+  caption = "Crèches du groupe EVANCIA à Rennes", 
+  color = "lightblue"
+)
+
+```
+
+### quartiers
+```{r}
+valueBox(value = "92", caption = "Iris analysés", icon = "fa-map", color = "lightblue")
+```
+
+
+État des lieux des crèches rennaises
+===============
+
+Column {data-width=600}
+--------
+
+### Nombre total de crèche
+```{r}
+nb_creches <- nrow(creche_rennes)
+
+valueBox(
+  icon = "fa-child", 
+  value = nb_creches, 
+  caption = "Crèches à Rennes", 
+  color = "lightgrey"
+)
+```
+
+
+### **Carte des crèches rennaises**
+```{r}
+tmap_mode("view")
+
+tm_shape(iris_rennes) +
+  tm_polygons(
+    col = "grey", 
+    alpha = 0.3, 
+    id = "iris_name"
+  ) +
+  tm_shape(creche_rennes) + 
+  tm_bubbles(
+    col = "type_juridique",
+    palette = "Set2",
+    size = 1,          
+    border.col = "black",
+    border.lwd = 1,     
+    id = "nom_creche",
+    popup.vars = c(
+      "Nombre salariés" = "effectif_label",
+      "Régime juridique" = "type_juridique"
+    ),
+    legend.col.show = FALSE 
+  ) +
+  tm_layout(legend.show = FALSE) # Sécurité supplémentaire pour masquer toutes les légendes
+```
+
+
+## Importance du régime juridique {.tabset}
+
+
+### Répartition des régimes juridiques
+```{r, fig.height=4.5}
+library(ggplot2)
+library(dplyr)
+
+# 1. Calcul des pourcentages
+df_stats <- creche_rennes %>%
+  count(type_juridique) %>% 
+  mutate(perc = (n / sum(n)) * 100) 
+
+# 2. Le graphique 
+ggplot(df_stats, aes(x = reorder(type_juridique, -perc), y = perc, fill = type_juridique)) +
+  geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
+  geom_text(aes(label = paste0(round(perc, 1), "%")), 
+            vjust = -0.5, 
+            size = 4) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = NULL,
+       subtitle = NULL,
+       x = NULL, 
+       y = NULL) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.x = element_blank(), # Enlève les lignes verticales
+    axis.text.y = element_blank(),  
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) # pour voir étiquette 1
+```
+
+### Homogénéité des crèches 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.width=10, fig.height=8}
+
+library(spatstat.geom)
+library(spatstat.explore)
+library(dplyr)
+
+# -------------------------
+# Crèches parentales
+# -------------------------
+
+creche_parentale <- creche_rennes %>%
+  filter(type_juridique == "Parentale")
+
+creche_parentale_ppp <- as.ppp(
+  st_coordinates(creche_parentale),
+  W = as.owin(st_bbox(iris_rennes))
+)
+
+K_parentale <- Kest(creche_parentale_ppp, correction = "isotropic")
+
+env_parentale <- envelope(
+  creche_parentale_ppp,
+  Kest,
+  nsim = 99,
+  verbose = FALSE
+)
+
+# -------------------------
+# Crèches privées
+# -------------------------
+
+creche_prive <- creche_rennes %>%
+  filter(type_juridique %in% c("SAS", "SARL"))
+
+creche_prive_ppp <- as.ppp(
+  st_coordinates(creche_prive),
+  W = as.owin(st_bbox(iris_rennes))
+)
+
+K_prive <- Kest(creche_prive_ppp, correction = "isotropic")
+
+env_prive <- envelope(
+  creche_prive_ppp,
+  Kest,
+  nsim = 99,
+  verbose = FALSE
+)
+
+# -------------------------
+# Affichage
+# -------------------------
+
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+
+plot(K_parentale,
+     main = "K de Ripley - Crèches parentales")
+
+plot(K_prive,
+     main = "K de Ripley - Crèches privées")
+
+plot(env_parentale,
+     main = "Enveloppes - Crèches parentales")
+
+plot(env_prive,
+     main = "Enveloppes - Crèches privées")
+
+par(mfrow = c(1,1))
+```
+
+
+### Interprétations 
+
+#### Rappel :
+
+- **Municipale** : crèches gérées par la Ville de Rennes  
+- **Départementale** : crèches gérées par le département d’Ille-et-Vilaine  
+- **Parentale** : association de parents  
+- **Privé (SAS/SARL)** : entreprises ou grands groupes (ex: Babilou...)
+- **Micro-crèches** : entreprises individuelles, max 12 enfants  
+- **CAF** : crèches modèles, mission de service public
+
+#### Interprétation :
+
+À première vue, la carte des crèches rennaises donne l’impression d’une répartition relativement diffuse des crèches parentales (en turquoise). Leur présence dans de nombreux quartiers peut laisser penser à une certaine homogénéité spatiale. Cette forte implantation s’explique notamment par les caractéristiques socio-démographiques locales : population jeune, forte culture associative et implication importante des familles dans les modes de garde alternatifs. Les crèches parentales semblent ainsi s’inscrire dans une logique de proximité et d’ancrage local.
+
+Cependant, cette première impression est nuancée par les résultats de l’analyse statistique menée à l’aide de la fonction K de Ripley. Les courbes obtenues montrent que la distribution des crèches parentales n’est pas réellement aléatoire : on observe au contraire des phénomènes de regroupement dans certains secteurs de la ville. Ces concentrations traduisent probablement l’existence de territoires particulièrement favorables à ce type de structure, où se combinent demande familiale, dynamiques de quartier et réseaux sociaux locaux.
+
+Concernant les crèches privées de type SAS ou SARL(en jaune et marron clair), notamment les grands groupes comme Babilou, la logique d’implantation apparaît différente. La carte met en évidence des concentrations plus visibles dans certains quartiers stratégiques, probablement liés à la présence d’actifs, de bureaux ou de zones à fort pouvoir d’achat. Les résultats de la fonction K de Ripley confirment cette tendance : la courbe associée aux structures privées présente une croissance plus marquée, traduisant une forte tendance à l’agrégation spatiale. Les établissements privés ont donc tendance à se localiser dans des zones déjà attractives économiquement, même en présence de concurrents directs.
+
+Cette concentration peut paraître contre-intuitive dans une logique concurrentielle, mais elle reflète en réalité une stratégie de marché classique : les groupes privés cherchent avant tout à s’implanter dans des secteurs où la demande est déjà forte et solvable. Dès lors, il apparaît difficile d’éviter totalement la concurrence privée à Rennes. Toutefois, les crèches parentales et les structures privées ne répondent pas aux mêmes attentes ni aux mêmes profils de familles, que ce soit en termes de coût, de flexibilité ou de mode de fonctionnement.
+
+Ainsi, pour la suite de l’étude géomarketing, l’analyse se concentrera principalement sur les établissements privés, considérés comme les concurrents les plus directs dans le cadre d’un projet d’implantation pour le groupe Babilou.
+
+
+Carte densité des crèches rennes
+============
+
+
+## Iris & Zones saturés {.tabset}
+
+### Crèches par Iris
+```{r}
+
+# Jointure spatiale : associe chaque crèche à un IRIS
+creche_iris <- st_join(creche_rennes, iris_rennes)
+
+# Comptage du nombre de crèches par IRIS
+nb_creches_iris <- creche_iris %>%
+  st_drop_geometry() %>%
+  count(iris_name)
+
+# Ajout du nombre dans le shapefile IRIS
+iris_nb <- iris_rennes %>%
+  left_join(nb_creches_iris, by = "iris_name")
+
+# Remplacer les NA par 0
+iris_nb$n[is.na(iris_nb$n)] <- 0
+
+
+
+tm_shape(iris_nb) +
+  tm_polygons(
+    col = "n",
+    palette = "Blues",
+    style = "fixed",
+    breaks = c(-1,0,1,2,4,10),
+    labels = c(
+      "0 crèche",
+      "1 crèche",
+      "2 crèches",
+      "3 à 4 crèches",
+      "5+ crèches"
+    ),
+    title = "Nombre de crèches",
+    id = "iris_name"
+  )
+```
+
+
+### Densité crèches
+```{r}
+#### Densité des crèches
+
+planar_sf<-st_transform(iris_rennes, 2154)
+planar_sirene<-st_transform(creche_rennes, 2154)
+ppp_points <- as.ppp(st_coordinates(planar_sirene),as.owin(planar_sf))
+ds <- density(ppp_points) #sample version
+plot(ds, main='Densité des crèches')
+
+
+```
+
+
+### Crèches privées par iris
+```{r}
+# Jointure spatiale : associe chaque crèche à un IRIS
+creche_iris_priv <- st_join(creche_prive, iris_rennes)
+
+# Comptage du nombre de crèches par IRIS
+nb_creches_priv_iris <- creche_iris_priv %>%
+  st_drop_geometry() %>%
+  count(iris_name)
+
+# Ajout du nombre dans le shapefile IRIS
+iris_nb_priv <- iris_rennes %>%
+  left_join(nb_creches_priv_iris, by = "iris_name")
+
+# Remplacer les NA par 0
+iris_nb_priv$n[is.na(iris_nb_priv$n)] <- 0
+```
+
+```{r}
+tm_shape(iris_nb_priv) +
+  tm_polygons(
+    col = "n",
+    palette = "Blues",
+    style = "fixed",
+    breaks = c(-1,0,1,2,4,10),
+    labels = c(
+      "0 crèche",
+      "1 crèche",
+      "2 crèches",
+      "3 à 4 crèches",
+      "5+ crèches"
+    ),
+    title = "Nombre de crèches privées",
+    id = "iris_name"
+  )
+```
+
+### Densité crèches privés
+```{r}
+planar_sf<-st_transform(iris_rennes, 2154)
+planar_sirene<-st_transform(creche_prive, 2154)
+ppp_points <- as.ppp(st_coordinates(planar_sirene),as.owin(planar_sf))
+ds <- density(ppp_points) #sample version
+plot(ds, main='Densité des crèches privées')
+```
+
+
+
+## Carte isochrone et interprétations {.tabset}
+
+### Carte isochrone 
+
+Lecture : La zone en violet correspond aux secteurs accessibles en 5 minutes depuis une crèche (point noir), en utilisant le vélo ou les transports en commun.
+
+```{r}
+iso<-otp_isochrone(otpcon,fromPlace = creche_prive,fromID=creche_prive$siret,mode = c("WALK","TRANSIT"),
+           maxWalkDistance = 2000,date_time=as.POSIXct(strptime("2023-12-22 08:35", "%Y-%m-%d %H:%M")),
+           cutoffSec = c(5, 7,9,11) * 60 ) # Cut offs in seconds
+iso$minutes = iso$time / 60
+```
+
+```{r}
+# 1. Sauvegarder la géométrie
+geom_iso <- iso$geometry
+
+# 2. Nettoyer iso
+iso_clean <- iso %>%
+  st_drop_geometry()
+
+# 3. Nettoyer creche
+creche_clean <- creche_prive %>%
+   st_drop_geometry() %>%
+   select(where(~ !is.list(.)))
+ colnames(iso_clean)[3]<-"siret"
+ # 4. Jointure
+iso_clean <- iso_clean %>%
+   left_join(creche_clean, by = "siret") %>%
+   distinct()
+
+# # 5. Remettre la géométrie
+iso_clean$geometry <- geom_iso
+
+# # 6. Reconvertir en sf
+ iso <- st_as_sf(iso_clean)
+```
+
+```{r}
+tmap_mode("view")
+
+tm_shape(iris_rennes) +
+  tm_polygons(col = "grey", fill_alpha = 0.5, id = "iris_name") +
+
+tm_shape(creche_prive) +
+  tm_dots(col = "red") +
+
+tm_shape(creche_rennes) +
+  tm_dots(col = "blue") +
+
+tm_shape(iso) +
+  tm_fill(
+    "minutes",
+    breaks = c(0, 5.01, 7.01, 9.01, 11.01),
+    title = "Isochrones (minutes)",
+    style = "fixed",
+    labels = c("0 to 5", "5 to 7", "7 to 9", "9 to 11"),
+    palette = "-BuPu",
+    id = "minutes",
+    alpha = 0.9,
+    border.col = "lightgrey",
+    lwd = 0.5
+  )
+```
+
+
+### Interprétations
+L’étude préalable de la répartition des crèches, qu’elles soient toutes catégories confondues ou uniquement privées, permet d’identifier les secteurs déjà fortement équipés ainsi que les zones présentant un potentiel d’implantation plus favorable. Dans une logique géomarketing, il apparaît peu pertinent de s’implanter dans des IRIS déjà saturés en établissements, notamment dans l’hyper-centre rennais où la concurrence est déjà importante, y compris entre structures privées.
+
+Les cartes réalisées mettent en évidence une forte concentration des crèches privées dans les secteurs centraux et les quartiers les plus dynamiques de Rennes. Cette tendance confirme les résultats observés précédemment avec la fonction K de Ripley : les établissements privés présentent une logique d’agrégation spatiale, en se regroupant dans les zones à forte attractivité économique et démographique.
+
+À l’inverse, plusieurs secteurs périphériques apparaissent moins équipés, notamment à l’est et au sud-est de la ville. Or, ces espaces connaissent actuellement d’importantes mutations urbaines et résidentielles, avec l’arrivée progressive de nouveaux actifs et de nouvelles familles. La croissance urbaine vers des communes comme Cesson-Sévigné laisse ainsi entrevoir une augmentation future de la demande en services de petite enfance.
+
+L’analyse des cartes révèle également l’importance des grands axes de mobilité dans les logiques d’implantation. Le secteur de La Poterie, principal parking relais pour les actifs venant du sud-est de l’agglomération, présente déjà une concentration notable de crèches. Cette observation suggère que les déplacements pendulaires domicile-travail jouent un rôle important dans les choix d’implantation des structures privées, les parents recherchant des solutions de garde facilement accessibles sur leurs trajets quotidiens.
+
+Cette dimension est d’autant plus importante que la métropole rennaise développe actuellement une politique ambitieuse de mobilité durable : extension du réseau de métro, renforcement des lignes de bus, développement du covoiturage et projet de tramway à l’horizon 2030. Dans cette perspective, il apparaît essentiel d’anticiper les futurs flux de population et les nouvelles centralités urbaines.
+
+L’étude des cartes isochrones permet justement d’évaluer les zones déjà accessibles à pied ou en transports en commun depuis les crèches privées existantes. Une isochrone représente l’ensemble des espaces accessibles en un temps donné depuis un point précis. Par exemple, une isochrone de 10 minutes autour d’une crèche correspond aux zones atteignables en moins de 10 minutes à pied ou en transport.
+
+Dans cette logique prospective, les secteurs de Beaulieu, Joliot-Curie et Jeanne d'Arc apparaissent comme des zones particulièrement intéressantes. Ces quartiers sont appelés à évoluer avec le développement des infrastructures de transport et accueillent déjà plusieurs établissements d’enseignement supérieur et pôles d’activité, sans pour autant disposer d’une offre de crèches proportionnelle aux besoins futurs attendus.
+
+La suite de l’analyse cherchera donc à dépasser la seule logique concurrentielle afin d’intégrer davantage les besoins des futurs usagers : proximité des parcs et espaces verts, densité de population active, accessibilité, stationnement ou encore qualité du cadre de vie familial.
+
+
+
+Analyse des variables d'intérêts
+=========
+
+## Densité de population {.tabset}
+
+### Densité de population par IRIS (habitants/m²)
+```{r}
+library(leaflet)
+
+# Calculer la superficie de chaque IRIS en m²
+iris_densite <- iris_rennes %>%
+  st_transform(2154) %>%                          # Lambert-93 pour avoir des m²
+  mutate(superficie_m2 = as.numeric(st_area(.))) %>%
+  st_transform(4326)                              # Reprojeter en WGS84 pour leaflet
+
+# Calculer la densité : on utilise Pop_15_64 comme proxy de population
+# (remplacer par une colonne de population totale si disponible dans iris_data)
+iris_densite <- iris_densite %>%
+  mutate(
+    densite = Pop_15_64 / superficie_m2,
+    densite_label = round(densite * 10000, 2)     # habitants pour 10 000 m²
+  )
+
+# Palette de couleurs
+pal_densite <- colorNumeric(
+  palette = "YlOrRd",
+  domain  = iris_densite$densite,
+  na.color = "white"
+)
+
+leaflet(iris_densite) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(
+    fillColor   = ~pal_densite(densite),
+    fillOpacity = 0.75,
+    color       = "white",
+    weight      = 1,
+    label       = ~paste0(iris_name, " — ", densite_label, " hab./10 000 m²"),
+    popup       = ~paste0(
+      "<b>", iris_name, "</b><br>",
+      "Densité : ", densite_label, " hab./10 000 m²<br>",
+      "Pop. 15-64 ans : ", Pop_15_64, "<br>",
+      "Superficie : ", round(superficie_m2 / 10000, 1), " ha"
+    ),
+    highlightOptions = highlightOptions(
+      weight    = 2,
+      color     = "black",
+      fillOpacity = 0.9,
+      bringToFront = TRUE
+    )
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal      = pal_densite,
+    values   = ~densite,
+    title    = "Densité<br>(hab./m²)",
+    labFormat = labelFormat(suffix = "", digits = 5),
+    opacity  = 0.9
+  )
+```
+
+### Interprétations
+L’analyse de la densité des crèches rennaises confirme plusieurs tendances déjà observées dans les pages précédentes. Les structures d’accueil de la petite enfance se concentrent majoritairement dans l’hyper-centre et dans les quartiers historiquement les plus dynamiques de Rennes. Cette organisation spatiale traduit une logique classique d’implantation : proximité des zones d’emploi, forte densité de population et accessibilité immédiate.
+
+Cependant, cette lecture met également en évidence des espaces moins couverts, notamment dans la partie Est de la ville. Or, cette zone représente aujourd’hui un secteur stratégique dans les futures dynamiques urbaines rennaises. L’ouverture vers Cesson-Sévigné, l’arrivée progressive de nouveaux habitants et le développement des infrastructures de transport renforcent son attractivité résidentielle.
+
+Le secteur de Beaulieu et alentour, apparaît particulièrement intéressant. Malgré la présence du métro avec la station Métro de Rennes Beaulieu-Université, et Joliot-Curie, sa proximité avec plusieurs axes routiers majeurs et l’existence de nombreux espaces verts adaptés aux familles, l’offre en crèches y reste relativement limitée au regard du potentiel futur du quartier.
+
+Cette situation rejoint les constats formulés précédemment à partir des analyses de concurrence et des fonctions de Ripley : les crèches privées tendent à se regrouper dans les secteurs centraux déjà fortement attractifs, laissant certains espaces périphériques en développement moins équipés. Dans une logique géomarketing, cela représente une opportunité stratégique pour le groupe Babilou.
+
+Les crèches du groupe sont aujourd’hui principalement implantées dans le centre-ville rennais. Notre équipe propose donc une approche différente pour ce projet : anticiper les futures dynamiques de population plutôt que suivre uniquement les localisations historiques de la concurrence. L’objectif serait d’implanter une nouvelle structure plus à l’Est de la ville afin de capter une clientèle issue à la fois des quartiers rennais en expansion et des flux pendulaires provenant de Cesson-Sévigné et du Nord-Est de Rennes Métropole.
+
+Cette stratégie apparaît d’autant plus pertinente que la métropole développe actuellement d’importants projets de mobilité durable. Les futures extensions des transports en commun, notamment le projet de tramway à l’horizon 2030, devraient renforcer l’accessibilité des secteurs est et nord-est de la ville. Le corridor reliant le centre-ville à Beaulieu, puis vers les zones universitaires et technologiques, constitue ainsi un axe de développement particulièrement prometteur.
+
+## Parcs et squares {.tabset}
+
+### Carte Parcs, Squares et Crèches
+```{r}
+library(leaflet)
+
+# Reprojeter tout en WGS84 (EPSG:4326) pour leaflet
+creche_wgs84 <- st_transform(creche_rennes, 4326)
+square_wgs84 <- st_transform(square_rennes, 4326)
+parc_wgs84   <- st_transform(parc_rennes,   4326)
+metro_wgs84 <- st_transform(metro_rennes,   4326)
+
+# Extraire les coordonnées
+creche_coords <- st_coordinates(creche_wgs84)
+square_coords <- st_coordinates(square_wgs84)
+parc_coords   <- st_coordinates(parc_wgs84)
+metro_coords <- st_coordinates(metro_wgs84)
+
+leaflet() %>%
+  # Fond CartoDB.Positron : clair, routes bien visibles, très similaire à Esri.WorldGrayCanvas
+  addProviderTiles(providers$CartoDB.Positron) %>%
+
+  # Crèches — cercles bleu foncé
+  addCircleMarkers(
+    lng    = creche_coords[, 1],
+    lat    = creche_coords[, 2],
+    radius = 5,
+    color  = "white",
+    weight = 1,
+    fillColor  = "black",
+    fillOpacity = 0.9,
+
+  # texte affiché au survol
+    label = creche_wgs84$unite_legal,
+
+  # popup au clic 
+    popup = paste0("<b>Creche :</b><br>", creche_wgs84$nom_creche),
+
+  group  = "Crèches"
+) %>%
+
+  # Parcs — cercles vert foncé
+  addCircleMarkers(
+    lng    = parc_coords[, 1],
+    lat    = parc_coords[, 2],
+    radius = 5,
+    color  = "white",
+    weight = 1,
+    fillColor  = "darkgreen",
+    fillOpacity = 0.9,
+
+  # texte affiché au survol
+    label = parc_wgs84$nom,
+
+  # popup au clic 
+    popup = paste0("<b>Parc :</b><br>", parc_wgs84$nom),
+
+  group  = "Parcs et Squares"
+) %>%
+
+  # Squares — cercles vert foncé (même catégorie que les parcs)
+  addCircleMarkers(
+    lng    = square_coords[, 1],
+    lat    = square_coords[, 2],
+    radius = 5,
+    color  = "white",
+    weight = 1,
+    fillColor  = "darkgreen",
+    fillOpacity = 0.9,
+
+  # texte affiché au survol
+    label = square_wgs84$Libelle_de_,
+
+  # popup au clic 
+    popup = paste0("<b>Square :</b><br>", square_wgs84$Libelle_de_),
+
+  group  = "Parcs et Squares"
+) %>%
+  
+  # Métros — cercles rouge
+  # Métros — cercles rouges avec nom au survol
+  addCircleMarkers(
+    lng    = metro_coords[, 1],
+    lat    = metro_coords[, 2],
+    radius = 5,
+    color  = "white",
+    weight = 1,
+    fillColor  = "red",
+    fillOpacity = 0.9,
+
+  # texte affiché au survol
+    label = metro_wgs84$nom,
+
+  # popup au clic 
+    popup = paste0("<b>Station :</b><br>", metro_wgs84$nom),
+
+    group  = "Stations de métro"
+)%>%
+
+  # Contrôle des couches (on/off)
+  addLayersControl(
+    overlayGroups = c("Crèches", "Parcs et Squares", "Stations de métro"),
+    options = layersControlOptions(collapsed = FALSE)
+  ) %>%
+
+  # Légende
+  addLegend(
+    position = "bottomright",
+    colors   = c("black", "darkgreen", "red"),
+    labels   = c("Crèches", "Parcs et Squares", "Stations de métro"),
+    title    = "Équipements",
+    opacity  = 0.9
+  )
+```
+
+### Interprétations
+
+Au-delà de la simple question concurrentielle, le secteur de Beaulieu présente plusieurs caractéristiques particulièrement attractives pour les familles. L’objectif de notre analyse n’est pas uniquement d’identifier un espace disponible, mais de réfléchir à l’expérience quotidienne des futurs parents et des enfants accueillis dans la future crèche.
+
+La carte des parcs, squares et stations de métro met en évidence un environnement urbain équilibré, combinant accessibilité et qualité de vie. Les espaces verts y sont nombreux et répartis de manière cohérente autour des stations de transport en commun, ce qui constitue un atout important pour une structure de petite enfance.
+
+Deux secteurs apparaissent particulièrement intéressants autour des stations Métro de Rennes Beaulieu-Université et Joliot-Curie.
+
+Au Nord de la station Beaulieu-Université, une première opportunité d’implantation offrirait un cadre particulièrement favorable au développement des enfants, grâce à la proximité de l’étang des Longs Champs ainsi que des squares Jean-Jacques-Rousseau et Marcel Bouget. Ces espaces permettent d’imaginer une crèche intégrée dans un environnement plus apaisé et végétalisé, propice aux sorties pédagogiques, aux promenades et à la vie familiale.
+
+Une seconde alternative apparaît au sud du secteur, autour de la promenade Marguerite Yourcenar et des squares du Bois Perrin. Là encore, l’environnement résidentiel et la présence d’espaces verts renforcent l’attractivité du quartier pour de jeunes familles recherchant un cadre de vie plus calme tout en restant connecté au reste de la métropole.
+
+L’accessibilité constitue également un point fort majeur du secteur. Les stations Beaulieu-Université et Joliot-Curie permettent de rejoindre rapidement le centre-ville de Rennes ainsi que les principaux pôles d’activité de la métropole. Ces stations se situent également à proximité des axes reliant Cesson-Sévigné et des principaux parkings relais utilisés par les actifs venant de l’est rennais.
+
+Cette logique rejoint directement l’analyse isochrone réalisée précédemment : la future crèche pourrait s’intégrer dans les trajets quotidiens des parents, en permettant un dépôt rapide des enfants avant de poursuivre vers le lieu de travail, en métro, en bus ou via les grands axes routiers.
+
+Conclusion 
+=========
+
+Column {data-width=1000}
+--------
+
+#### **Bilan de l’étude géomarketing**
+
+À travers cette analyse spatiale, plusieurs tendances fortes se dégagent concernant l’implantation potentielle d’une nouvelle crèche Babilou dans la métropole rennaise.
+
+Les différentes analyses réalisées — répartition des crèches existantes, fonctions de Ripley, densité spatiale, accessibilité par les transports, isochrones et environnement urbain — convergent vers une même zone stratégique située dans le nord-est de Rennes.
+
+Trois quartiers apparaissent particulièrement pertinents :
+
+- Beaulieu
+- Jeanne d'Arc
+- Joliot-Curie
+
+Ces secteurs présentent plusieurs avantages complémentaires :
+
+- une accessibilité forte grâce au métro et aux grands axes,
+- une proximité avec les flux pendulaires venant de Cesson-Sévigné,
+- des quartiers appelés à évoluer démographiquement,
+- une offre en espaces verts favorable aux familles,
+- et une concurrence privée encore moins dense qu’en hyper-centre.
+
+Notre équipe géomarketing considère ainsi que ces quartiers représentent des opportunités crédibles pour accompagner les futures dynamiques urbaines du Rennes de demain.
+
+#### **Limites et ouverture de l’étude**
+
+Cette étude constitue avant tout une aide à la décision pour l’implantation d’une future crèche. L’analyse géomarketing permet d’identifier des tendances spatiales, des zones stratégiques et des secteurs potentiellement favorables à une implantation, mais elle ne peut pas, à elle seule, déterminer l’emplacement final d’une structure.
+
+Plusieurs éléments complémentaires devraient encore être pris en compte, comme le prix du foncier et des loyers, les possibilités réelles d’implantation immobilière, la concurrence dans les communes voisines (notamment Cesson-Sévigné), ou encore la structure démographique plus détaillée des habitants et les besoins réels des familles.
+
+Il pourrait également être intéressant d’élargir l’analyse aux zones périurbaines en forte croissance, où la demande en structures d’accueil pourrait augmenter dans les prochaines années.
+
+Enfin, ce travail met en évidence l’intérêt des outils de statistique spatiale dans les problématiques de géomarketing. Ces méthodes permettent de mieux comprendre les dynamiques territoriales et d’apporter des éléments concrets pour orienter la prise de décision.
+
+La décision finale nécessiterait néanmoins un travail complémentaire avec d’autres acteurs du groupe Babilou, notamment les équipes en charge du développement, de l’immobilier ou encore des aspects financiers, afin de confronter les résultats de l’analyse aux contraintes opérationnelles du terrain.

@@ -1,0 +1,289 @@
+---
+title: "correlations"
+format: html
+editor: visual
+---
+## Libraries :
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggcorrplot)
+```
+
+
+## Importations
+```{r}
+generale <- read.csv("générale.csv")
+univ2 <- read.csv("univ2.csv", stringsAsFactors = TRUE)
+summary(univ2)
+```
+
+```{r}
+head(univ2)
+```
+
+
+## Corrélations générales :
+### Corrélation quanti-quanti
+```{r}
+generale_modif <- generale %>% select(-c(Annee,Diplome,Num_Etabl,Nom_Etabl,Code_Domaine,Code_Discipline,Situation,Tx_rep))
+```
+
+```{r}
+generale_quanti <- generale_modif[sapply(generale_modif, function(x) is.numeric(x) | is.integer(x))]
+apply(X = generale_quanti, MARGIN = 2, FUN = class)
+```
+```{r}
+mat_cor <- cor(generale_quanti)
+
+p <- ggcorrplot(mat_cor, method = "square", type = "lower",
+           lab = TRUE,  
+           lab_col = "black",
+           colors = c("red", "white", "dodgerblue"))
+
+ggsave("./Output/correlation_quanti_generale.jpeg", plot = p, width = 8, height = 6 )
+```
+
+```{r}
+generale_sans_salaire <- generale_modif %>% select(-c(Tx_chomage_regional,Salaire_net_mens_med_regional,Salaire_net_mens_1_quartile,Salaire_net_mens_3_quartile))
+```
+
+```{r}
+generale_quanti_sans_salaire <- generale_sans_salaire[sapply(generale_sans_salaire, function(x) is.numeric(x) | is.integer(x))]
+apply(X = generale_quanti_sans_salaire, MARGIN = 2, FUN = class)
+```
+
+```{r}
+mat_cor2 <- cor(generale_quanti_sans_salaire)
+
+p2 <- ggcorrplot(mat_cor2, method = "square", type = "lower",
+           lab = TRUE,  
+           lab_col = "black",
+           colors = c("red", "white", "dodgerblue"))
+
+ggsave("./Output/correlation_quanti_generale_sans_salaire.jpeg", plot = p2, width = 8, height = 6 )
+```
+
+### Quali quanti :
+```{r}
+donnees_quali <- generale_sans_salaire[sapply(generale_sans_salaire, function(x) is.character(x) | is.factor(x))]
+donnees_quanti <- generale_sans_salaire[sapply(generale_sans_salaire, function(x) is.numeric(x) | is.integer(x))]
+
+donnees_quali <- data.frame(lapply(donnees_quali, factor))  # Transformer en facteur
+```
+
+```{r}
+results <- data.frame()
+
+for (quali in colnames(donnees_quali)) {
+  for (quanti in colnames(donnees_quanti)) {
+    test_result <- kruskal.test(donnees_quanti[[quanti]] ~ donnees_quali[[quali]])
+    results <- rbind(results, data.frame(Variable_Quali = quali, 
+                                         Variable_Quanti = quanti, 
+                                         p_value = test_result$p.value))
+  }
+}
+
+print(results)
+
+```
+
+```{r}
+ggplot(results, aes(x = Variable_Quali, y = Variable_Quanti, fill = p_value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "red", high = "blue") +
+  theme_minimal() +
+  labs(title = "Relation entre variables qualitatives et quantitatives", fill = "p-value")+
+  theme(axis.text.x = element_text(angle = 45))
+```
+Note : si P-value<0.05 on rejette H0 (il y a une différence significative dans au moins un des sous-groupe de domaines d'études); si p-value>0.05 on accepte H0 il y a pas de différence intra-groupe
+
+## Corrélation spécifique :
+### Quanti-Quanti
+```{r}
+spe_modif <- univ2 %>% select(-c(Annee,Diplome,Num_Etabl,Nom_Etabl,Code_Domaine,Code_Discipline,Situation,Tx_rep, Code_Acad))
+```
+
+```{r}
+spe_quanti <-  spe_modif[sapply(spe_modif, function(x) is.numeric(x) | is.integer(x))]
+apply(X = spe_quanti, MARGIN = 2, FUN = class)
+```
+
+```{r}
+mat_cor <- cor(spe_quanti)
+
+p3 <- ggcorrplot(mat_cor, method = "square", type = "lower",
+           lab = TRUE,  
+           lab_col = "black",
+           colors = c("red", "white", "dodgerblue"))
+
+ggsave("./Output/correlation_quanti_spe.jpeg", plot = p3, width = 8, height = 6 )
+```
+
+```{r}
+spe_sans_salaire <- spe_modif %>% select(-c(Tx_chomage_regional,Salaire_net_mens_med_regional,Salaire_net_mens_1_quartile,Salaire_net_mens_3_quartile))
+```
+
+```{r}
+spe_quanti_sans_salaire <- spe_sans_salaire[sapply(spe_sans_salaire, function(x) is.numeric(x) | is.integer(x))]
+apply(X = spe_quanti_sans_salaire, MARGIN = 2, FUN = class)
+```
+
+```{r}
+mat_cor2 <- cor(spe_quanti_sans_salaire)
+
+p4 <- ggcorrplot(mat_cor2, method = "square", type = "lower",
+           lab = TRUE,  
+           lab_col = "black",
+           colors = c("red", "white", "dodgerblue"))
+
+ggsave("./Output/correlation_quanti_spe_sans_salaire.jpeg", plot = p4, width = 8, height = 6 )
+```
+
+### Quali quanti :
+```{r}
+donnees_spe_quali <- spe_sans_salaire[sapply(spe_sans_salaire, function(x) is.character(x) | is.factor(x))]
+donnees_spe_quanti <- spe_sans_salaire[sapply(spe_sans_salaire, function(x) is.numeric(x) | is.integer(x))]
+
+donnees_spe_quali <- data.frame(lapply(donnees_spe_quali, factor))  # Transformer en facteur
+```
+
+```{r}
+results2 <- data.frame()
+
+for (quali in colnames(donnees_spe_quali)) {
+  for (quanti in colnames(donnees_spe_quanti)) {
+    test_result <- kruskal.test(donnees_spe_quanti[[quanti]] ~ donnees_spe_quali[[quali]])
+    results2 <- rbind(results, data.frame(Variable_Quali = quali, 
+                                         Variable_Quanti = quanti, 
+                                         p_value = test_result$p.value))
+  }
+}
+
+print(results2)
+
+```
+
+```{r}
+ggplot(results2, aes(x = Variable_Quali, y = Variable_Quanti, fill = p_value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "red", high = "blue") +
+  theme_minimal() +
+  labs(title = "Relation entre variables qualitatives et quantitatives", fill = "p-value")+
+  theme(axis.text.x = element_text(angle = 45))
+```
+
+## Calcul des taux de variation :
+```{r}
+# Convertir les variables nécessaires en numérique
+univ2 <- univ2 %>%
+  mutate(Annee = as.numeric(Annee),
+         Tx_insertion = as.numeric(Tx_insertion))
+
+# Calcul du taux de variation du taux d'insertion par Master et par année
+donnees_variation <- univ2 %>%
+  arrange(Nom_Discipline, Annee) %>%  # Trier par Master et année
+  group_by(Nom_Discipline) %>%
+  mutate(Taux_variation_insertion = (Tx_insertion - lag(Tx_insertion)) / lag(Tx_insertion) * 100) %>%
+  ungroup()
+
+# Affichage des résultats
+head(donnees_variation, 10)
+
+```
+
+```{r}
+library(dplyr)
+
+# Conversion des colonnes en numérique si nécessaire
+univ2 <- univ2 %>%
+  mutate(Annee = as.numeric(Annee),
+         Tx_insertion = as.numeric(Tx_insertion))
+
+# Calcul du taux de variation du taux d'insertion par Académie et Master
+donnees_variation_academie <- univ2 %>%
+  arrange(Nom_Acad, Nom_Discipline, Annee) %>%  # Trier par Académie, Master et Année
+  group_by(Nom_Acad, Nom_Discipline) %>%
+  mutate(Taux_variation_insertion = (Tx_insertion - lag(Tx_insertion)) / lag(Tx_insertion) * 100) %>%
+  ungroup()
+
+# Affichage des résultats
+head(donnees_variation_academie, 10)
+```
+
+```{r}
+# Calcul du taux de variation moyen par académie
+taux_variation_moyen_academie <- donnees_variation_academie %>%
+  group_by(Nom_Acad) %>%
+  summarise(Taux_variation_moyen = mean(Taux_variation_insertion, na.rm = TRUE)) %>%
+  arrange(desc(Taux_variation_moyen))  # Trier du plus grand au plus petit
+
+# Affichage des résultats
+print(taux_variation_moyen_academie)
+
+```
+
+```{r}
+ggplot(taux_variation_moyen_academie, aes(x = reorder(Nom_Acad, Taux_variation_moyen), y = Taux_variation_moyen, fill = Taux_variation_moyen)) +
+  geom_bar(stat = "identity", color = "black", fill = "gray") +
+  coord_flip() +  # Couleur du plus bas au plus haut
+  labs(title = "Taux de variation moyen du taux d’insertion par Académie",
+       x = "Académie",
+       y = "Taux de variation moyen (%)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+## Taux d'insertion moyen par acad :
+```{r}
+# Calcul du taux d'insertion moyen par académie
+taux_insertion_moyen_academie <- univ2 %>%
+  group_by(Nom_Acad) %>%
+  summarise(Taux_insertion_moyen = mean(Tx_insertion, na.rm = TRUE)) %>%
+  arrange(desc(Taux_insertion_moyen))  # Trier du plus grand au plus petit
+
+# Affichage des résultats
+print(taux_insertion_moyen_academie)
+
+```
+
+```{r}
+ggplot(taux_insertion_moyen_academie, aes(x = reorder(Nom_Acad, Taux_insertion_moyen), y = Taux_insertion_moyen, fill = Taux_insertion_moyen)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Pour que les noms des académies soient lisibles
+  scale_fill_gradient(low = "orange", high = "darkgreen") +  # Couleur du plus bas au plus haut
+  labs(title = "Taux d'insertion moyen par Académie",
+       x = "Académie",
+       y = "Taux d'insertion moyen (%)") +
+  theme_minimal()+
+  theme(legend.position = "none")
+
+```
+## Taux d'insertion moyen sur la période :
+```{r}
+# Calcul du taux de variation moyen par académie et discipline
+taux_variation_moyen <- univ2 %>%
+  group_by(Nom_Acad, Annee) %>%
+  summarise(Taux_insertion_moyen = mean(Tx_insertion, na.rm = TRUE), .groups = "drop") %>%
+  arrange(Nom_Acad, Annee) %>%
+  group_by(Nom_Acad) %>%
+  mutate(Taux_variation = (Taux_insertion_moyen - lag(Taux_insertion_moyen)) / lag(Taux_insertion_moyen) * 100) %>%
+  summarise(Taux_variation_moyen = mean(Taux_variation, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(Taux_variation_moyen))  # Trier du plus grand au plus petit
+
+# Affichage des résultats
+print(taux_variation_moyen)
+
+```
+```{r}
+ggplot(taux_variation_moyen, aes(x = reorder(Nom_Acad, Taux_variation_moyen), y = Taux_variation_moyen, fill = Taux_variation_moyen)) +
+  geom_bar(stat = "identity", color = "black", fill = "gray") +
+  coord_flip()  +  
+  labs(title = "Taux de variation moyen du taux d'insertion par Académie et Discipline",
+       x = "Académie",
+       y = "Taux de variation moyen (%)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+classemen tl'etudiant, classement shangai
+
